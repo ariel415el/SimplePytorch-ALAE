@@ -12,9 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-
 import dareblopy as db
-import random
 
 import numpy as np
 import torch
@@ -22,10 +20,9 @@ import torch.tensor
 import torch.utils
 import torch.utils.data
 import time
-import math
 
-cpu = torch.device('cpu')
-
+# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device('cpu')
 
 class TFRecordsDataset:
     def __init__(self, rank=0, world_size=1, buffer_size_mb=200, channels=3, seed=None, train=True, needs_labels=False):
@@ -105,13 +102,10 @@ class TFRecordsDataset:
 
 def make_dataloader(dataset, GPU_batch_size):
     class BatchCollator(object):
-        def __init__(self):
-            self.device = torch.device("cpu")
-
         def __call__(self, batch):
             with torch.no_grad():
                 x, = batch
-                x = torch.tensor(x, requires_grad=True, device=torch.device(self.device), dtype=torch.float32)
+                x = torch.tensor(x, requires_grad=True, device=device, dtype=torch.float32)
                 return x
 
     batches = db.data_loader(iter(dataset), BatchCollator(), len(dataset) // GPU_batch_size)

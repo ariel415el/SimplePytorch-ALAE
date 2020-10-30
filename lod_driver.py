@@ -17,7 +17,7 @@ import torch
 import math
 import time
 from collections import defaultdict
-
+torch.manual_seed(7)
 MODEL_LAYER_COUNT = 4
 SNAPSHOT_FREQ = [300, 300, 300, 300, 300]
 REPORT_FREQ = [100, 300, 300, 300, 300]
@@ -67,7 +67,7 @@ class LODDriver:
         self.epoch_end_time = time.time()
         self.per_epoch_ptime = self.epoch_end_time - self.epoch_start_time
 
-    def set_epoch(self, epoch, optimizers):
+    def set_epoch(self, epoch):
         self.current_epoch = epoch
         self.iteration = 0
         self.tick_start_nimg_report = 0
@@ -75,4 +75,3 @@ class LODDriver:
         self.epoch_start_time = time.time()
 
         self.lod = MODEL_LAYER_COUNT - 1
-        return
