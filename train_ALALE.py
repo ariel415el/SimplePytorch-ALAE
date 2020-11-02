@@ -1,11 +1,8 @@
 import torch
-from reproduce_ALAE.ALAE import Model
-from reproduce_ALAE.dataloader import TFRecordsDataset, make_dataloader
-from reproduce_ALAE.lod_driver import LODDriver
-from reproduce_ALAE.custom_adam import LREQAdam
-from reproduce_ALAE.tracker import LossTracker
-from datasets import get_mnist
-from torch.utils.data import Dataset
+from ALAE import Model
+from custom_adam import LREQAdam
+from tracker import LossTracker
+from dataloader import get_dataloader
 from tqdm import tqdm
 import os
 import numpy as np
@@ -15,7 +12,7 @@ from PIL import Image
 
 BASE_LEARNING_RATE = 0.002
 DECODER_LAYER_TO_RESOLUTION = 28
-OUTPUT_DIR='training_outputs_DATASET'
+OUTPUT_DIR= 'training_outputs_DATASET_old'
 EPOCHS=100
 LATENT_SPACE_SIZE = 50
 LAYER_COUNT = 4
@@ -24,35 +21,8 @@ CHANNELS = 1  # Mnist is B&W
 BATCH_SIZE=128
 
 LOD_POWER = 5
-# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-device = torch.device("cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-
-def get_dataloader(tf=True):
-    data, _ = get_mnist('../data')
-    dataset = SimpleDataset(data[0].astype(np.float32))
-    kwargs = {'batch_size': BATCH_SIZE}
-    if device != "cpu":
-        kwargs.update({'num_workers': 1,
-                       'pin_memory': True,
-                       'shuffle': True},
-                      )
-    return torch.utils.data.DataLoader(dataset, **kwargs)
-
-
-
-class SimpleDataset(Dataset):
-    def __init__(self, data_matrix):
-        self.data_matrix = data_matrix
-
-    def __len__(self):
-        return len(self.data_matrix)
-
-    def __getitem__(self, idx):
-        return self.data_matrix[idx].reshape(1,28,28)
-
-    def get_data(self):
-        return self.data_matrix
 
 def save_sample(epoch, tracker, sample, samplez, model):
     with torch.no_grad():
@@ -100,7 +70,7 @@ def train_mnist():
                   channels=CHANNELS,
                   )
     model.train()
-
+    model.to(device)
     test_model = Model(layer_count=LAYER_COUNT,
                   latent_size=LATENT_SPACE_SIZE,
                   mapping_layers=MAPPING_LAYERS,
@@ -108,6 +78,8 @@ def train_mnist():
                   )
     test_model.eval()
     test_model.requires_grad_(False)
+    test_model.to(device)
+
 
     decoder_optimizer = LREQAdam([
         {'params': model.decoder.parameters()},
@@ -118,7 +90,6 @@ def train_mnist():
         {'params': model.encoder.parameters()},
         {'params': model.mapping_tl.parameters()},
     ], lr=BASE_LEARNING_RATE, betas=(0.0, 0.99), weight_decay=0)
-
 
     # Create test dataset
     path = '/home/ariel/projects/ALAE/dataset_samples/mnist'
@@ -133,43 +104,32 @@ def train_mnist():
 
     test_samples_z = torch.tensor( np.random.RandomState(3456).randn(32, LATENT_SPACE_SIZE)).float()
 
-    # dataloader = get_dataloader(tf=False)
-
-    dataset = TFRecordsDataset(rank=0, world_size=1, buffer_size_mb=1024, channels=1)
-
+    dataloader = get_dataloader(BATCH_SIZE)
 
     for epoch in range(EPOCHS):
-        i=0
-
-        dataset.reset(LOD_POWER, BATCH_SIZE)
-        dataloader = make_dataloader(dataset, BATCH_SIZE)
-
-        for x_orig in tqdm(dataloader):
-            i += 1
+        for batch in tqdm(dataloader):
             with torch.no_grad():
-                if x_orig.shape[0] != BATCH_SIZE:
+                if batch.shape[0] != BATCH_SIZE:
                     print("Skipping partial batch")
                     continue
-                x_orig = (x_orig / 127.5 - 1.)
-                x = x_orig
 
             x.requires_grad = True
 
             encoder_optimizer.zero_grad()
-            loss_d = model(x, LOD_POWER, 1, d_train=True, ae=False)
+            loss_d = model(batch, LOD_POWER, 1, d_train=True, ae=False)
             tracker.update(dict(loss_d=loss_d))
             loss_d.backward()
             encoder_optimizer.step()
 
             decoder_optimizer.zero_grad()
-            loss_g = model(x, LOD_POWER, 1, d_train=False, ae=False)
+            loss_g = model(batch, LOD_POWER, 1, d_train=False, ae=False)
             tracker.update(dict(loss_g=loss_g))
             loss_g.backward()
             decoder_optimizer.step()
 
             encoder_optimizer.zero_grad()
             decoder_optimizer.zero_grad()
-            lae = model(x, LOD_POWER, 1, d_train=True, ae=True)
+            lae = model(batch, LOD_POWER, 1, d_train=True, ae=True)
             tracker.update(dict(lae=lae))
             (lae).backward()
             encoder_optimizer.step()
