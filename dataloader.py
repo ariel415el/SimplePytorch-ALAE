@@ -19,21 +19,9 @@ def get_mnist(data_dir="data"):
     return (train_data, train_labels, test_data, test_labels), "MNIST"
 
 
-def get_dataloader(batch_size):
-    data, _ = get_mnist('../data')
-    dataset = MNISTDataset(data[0].astype(np.float32))
-    kwargs = {'batch_size': batch_size, 'collate_fn': RequireGradCollator()}
-    if device == "cuda:0":
-        kwargs.update({'num_workers': 2,
-                       'pin_memory': True,
-                       'shuffle': True},
-                      )
-    return torch.utils.data.DataLoader(dataset, **kwargs)
-
-
 class MNISTDataset(Dataset):
     def __init__(self, data_matrix):
-        self.data_matrix = data_matrix / 127.5 - 1.
+        self.data_matrix = data_matrix /  127.5 - 1.
 
     def __len__(self):
         return len(self.data_matrix)
@@ -46,8 +34,23 @@ class MNISTDataset(Dataset):
 
 
 class RequireGradCollator(object):
-    def __init__(self):
+    def __init__(self, device):
         self.device = device
+
     def __call__(self, batch):
         with torch.no_grad():
             return torch.tensor(batch, requires_grad=True, device=self.device, dtype=torch.float32)
+
+
+def get_dataloader(batch_size, test_set=False):
+    data, _ = get_mnist('../data')
+    data = data[2] if test_set else data[0]
+    dataset = MNISTDataset(data)
+    kwargs = {'batch_size': batch_size, 'collate_fn': RequireGradCollator(device)}
+    if device == "cuda:0":
+        kwargs.update({'num_workers': 2,
+                       'pin_memory': True,
+                       'shuffle': True},
+                      )
+    return torch.utils.data.DataLoader(dataset, **kwargs)
+

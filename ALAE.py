@@ -1,5 +1,6 @@
-from reproduce_ALAE.models import *
+from models import *
 import random
+
 
 def discriminator_logistic_simple_gp(d_result_fake, d_result_real, reals, r1_gamma=10.0):
     loss = (F.softplus(d_result_fake) + F.softplus(-d_result_real))
@@ -23,9 +24,10 @@ class DLatent(nn.Module):
         self.register_buffer('buff', buffer)
 
 class Model(nn.Module):
-    def __init__(self, layer_count, latent_size, mapping_layers, channels):
+    def __init__(self, layer_count, latent_size, mapping_layers, channels, device):
         super(Model, self).__init__()
         self.layer_count = layer_count
+        self.device = device
 
         self.mapping_tl = VAEMappingToLatentNoStyle(
             latent_size=latent_size,
@@ -57,7 +59,7 @@ class Model(nn.Module):
 
     def generate(self, lod, blend_factor, z=None, count=32, mixing=True, noise=True, return_styles=False, no_truncation=False):
         if z is None:
-            z = torch.randn(count, self.latent_size)
+            z = torch.randn(count, self.latent_size).to(self.device)
         styles = self.mapping_fl(z)[:, 0]
         s = styles.view(styles.shape[0], 1, styles.shape[1])
 
@@ -70,14 +72,14 @@ class Model(nn.Module):
 
         if mixing and self.style_mixing_prob is not None:
             if random.random() < self.style_mixing_prob:
-                z2 = torch.randn(count, self.latent_size)
+                z2 = torch.randn(count, self.latent_size).to(self.device)
                 styles2 = self.mapping_fl(z2)[:, 0]
                 styles2 = styles2.view(styles2.shape[0], 1, styles2.shape[1]).repeat(1, self.mapping_fl.num_layers, 1)
 
-                layer_idx = torch.arange(self.mapping_fl.num_layers)[np.newaxis, :, np.newaxis]
+                layer_idx = torch.arange(self.mapping_fl.num_layers)[np.newaxis, :, np.newaxis].to(self.device)
                 cur_layers = (lod + 1) * 2
                 mixing_cutoff = random.randint(1, cur_layers)
-                styles = torch.where(layer_idx < mixing_cutoff, styles, styles2)
+                styles = torch.where(layer_idx < mixing_cutoff, styles, styles2).to(self.device)
 
 
         rec = self.decoder.forward(styles, lod, blend_factor, noise)
@@ -95,7 +97,7 @@ class Model(nn.Module):
         if ae:
             self.encoder.requires_grad_(True)
 
-            z = torch.randn(x.shape[0], self.latent_size)
+            z = torch.randn(x.shape[0], self.latent_size).to(self.device)
             s, rec = self.generate(lod, blend_factor, z=z, mixing=False, noise=True, return_styles=True)
 
             Z, d_result_real = self.encode(rec, lod, blend_factor)
@@ -120,7 +122,7 @@ class Model(nn.Module):
             return loss_d
         else:
             with torch.no_grad():
-                z = torch.randn(x.shape[0], self.latent_size)
+                z = torch.randn(x.shape[0], self.latent_size).to(self.device)
 
             self.encoder.requires_grad_(False)
 

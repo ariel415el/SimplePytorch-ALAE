@@ -13,7 +13,7 @@ from PIL import Image
 BASE_LEARNING_RATE = 0.002
 DECODER_LAYER_TO_RESOLUTION = 28
 OUTPUT_DIR= 'training_outputs_DATASET_old'
-EPOCHS=100
+EPOCHS=1000
 LATENT_SPACE_SIZE = 50
 LAYER_COUNT = 4
 MAPPING_LAYERS = 6
@@ -67,14 +67,14 @@ def train_mnist():
     model = Model(layer_count=LAYER_COUNT,
                   latent_size=LATENT_SPACE_SIZE,
                   mapping_layers=MAPPING_LAYERS,
-                  channels=CHANNELS,
+                  channels=CHANNELS, device=device
                   )
     model.train()
     model.to(device)
     test_model = Model(layer_count=LAYER_COUNT,
                   latent_size=LATENT_SPACE_SIZE,
                   mapping_layers=MAPPING_LAYERS,
-                  channels=CHANNELS,
+                  channels=CHANNELS, device=device
                   )
     test_model.eval()
     test_model.requires_grad_(False)
@@ -92,19 +92,11 @@ def train_mnist():
     ], lr=BASE_LEARNING_RATE, betas=(0.0, 0.99), weight_decay=0)
 
     # Create test dataset
-    path = '/home/ariel/projects/ALAE/dataset_samples/mnist'
-    src = []
-    with torch.no_grad():
-        for filename in list(os.listdir(path))[:32]:
-            img = np.asarray(Image.open(os.path.join(path, filename)))[:, :, None]
-            im = img.transpose((2, 0, 1))
-            x = torch.tensor(np.asarray(im, dtype=np.float32), requires_grad=True) / 127.5 - 1.
-            src.append(x)
-        test_sample = torch.stack(src)
-
-    test_samples_z = torch.tensor( np.random.RandomState(3456).randn(32, LATENT_SPACE_SIZE)).float()
 
     dataloader = get_dataloader(BATCH_SIZE)
+    test_samples_z = torch.tensor( np.random.RandomState(3456).randn(32, LATENT_SPACE_SIZE)).float().to(device)
+    test_dataloader = get_dataloader(batch_size=32, test_set=True)
+    test_samples = next(iter(test_dataloader))
 
     for epoch in range(EPOCHS):
         for batch in tqdm(dataloader):
@@ -112,8 +104,6 @@ def train_mnist():
                 if batch.shape[0] != BATCH_SIZE:
                     print("Skipping partial batch")
                     continue
-
-            x.requires_grad = True
 
             encoder_optimizer.zero_grad()
             loss_d = model(batch, LOD_POWER, 1, d_train=True, ae=False)
@@ -138,7 +128,7 @@ def train_mnist():
             betta = 0.5 ** (BATCH_SIZE / (10 * 1000.0))
             test_model.lerp(model, betta)
 
-        save_sample(epoch, tracker, test_sample, test_samples_z, test_model)
+        save_sample(epoch, tracker, test_samples, test_samples_z, test_model)
 
 
 if __name__ == '__main__':
