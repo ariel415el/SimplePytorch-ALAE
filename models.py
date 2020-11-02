@@ -120,7 +120,6 @@ class VAEMappingFromLatent(nn.Module):
             block = MappingBlock(inputs, outputs, lrmul=0.1)
             inputs = outputs
             self.map_blocks.append(block)
-            #print("dense %d %s" % ((i + 1), millify(count_parameters(block))))
 
     def forward(self, x):
         x = pixel_norm(x)
@@ -146,9 +145,7 @@ class VAEMappingToLatentNoStyle(nn.Module):
     def forward(self, x):
         for i in range(self.mapping_layers):
             if i == self.mapping_layers - 1:
-                #x = self.map_blocks[i](x)
                 x = self.map_blocks[i](x)
             else:
-                #x = self.map_blocks[i](x)
                 x = self.map_blocks[i](x)
         return x
