@@ -22,43 +22,29 @@ BATCH_SIZE=128
 
 LOD_POWER = 5
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cpu")
 
 
 def save_sample(epoch, tracker, sample, samplez, model):
     with torch.no_grad():
         model.eval()
-        sample = sample[:BATCH_SIZE]
-        samplez = samplez[:BATCH_SIZE]
 
-        sample_in = sample
-        while sample_in.shape[2] > DECODER_LAYER_TO_RESOLUTION:
-            sample_in = F.avg_pool2d(sample_in, 2, 2)
-        assert sample_in.shape[2] == DECODER_LAYER_TO_RESOLUTION
-
-        Z, _ = model.encode(sample_in, LOD_POWER, 1)
-
+        Z, _ = model.encode(sample)
         Z = Z.repeat(1, model.mapping_fl.num_layers, 1)
-
-        rec1 = model.decoder(Z, LOD_POWER, 1, noise=False)
-        rec2 = model.decoder(Z, LOD_POWER, 1, noise=True)
-
+        sample_recreation = model.decoder(Z, LOD_POWER)
 
         Z = model.mapping_fl(samplez)
-        g_rec = model.decoder(Z, LOD_POWER, 1, noise=True)
-        sample_in = F.interpolate(sample_in, rec2.shape[2])
+        generation_from_random = model.decoder(Z, LOD_POWER)
+        sample_upscaled = F.interpolate(sample, sample_recreation.shape[2])
 
-        resultsample = torch.cat([sample_in, rec1, rec2, g_rec], dim=0)
+        resultsample = torch.cat([sample_upscaled, sample_recreation, generation_from_random], dim=0)
 
-        def save_pic(x_rec):
-            tracker.register_means(epoch)
-            tracker.plot()
+        resultsample = (resultsample*0.5 + 0.5).cpu()
 
-            result_sample = x_rec * 0.5 + 0.5
-            result_sample = result_sample.cpu()
-            f = os.path.join(OUTPUT_DIR, 'sample_%d.jpg' % (epoch))
-            save_image(result_sample, f, nrow=min(32, BATCH_SIZE))
-
-        save_pic(resultsample)
+        tracker.register_means(epoch)
+        tracker.plot()
+        f = os.path.join(OUTPUT_DIR, 'sample_%d.jpg' % (epoch))
+        save_image(resultsample, f, nrow=min(32, BATCH_SIZE))
 
 
 def train_mnist():
@@ -93,33 +79,28 @@ def train_mnist():
 
     # Create test dataset
 
-    dataloader = get_dataloader(BATCH_SIZE)
+    dataloader = get_dataloader(BATCH_SIZE, device=device)
     test_samples_z = torch.tensor( np.random.RandomState(3456).randn(32, LATENT_SPACE_SIZE)).float().to(device)
-    test_dataloader = get_dataloader(batch_size=32, test_set=True)
+    test_dataloader = get_dataloader(batch_size=32, device=device, test_set=True)
     test_samples = next(iter(test_dataloader))
 
     for epoch in range(EPOCHS):
         for batch in tqdm(dataloader):
-            with torch.no_grad():
-                if batch.shape[0] != BATCH_SIZE:
-                    print("Skipping partial batch")
-                    continue
-
             encoder_optimizer.zero_grad()
-            loss_d = model(batch, LOD_POWER, 1, d_train=True, ae=False)
+            loss_d = model(batch, LOD_POWER, d_train=True, ae=False)
             tracker.update(dict(loss_d=loss_d))
             loss_d.backward()
             encoder_optimizer.step()
 
             decoder_optimizer.zero_grad()
-            loss_g = model(batch, LOD_POWER, 1, d_train=False, ae=False)
+            loss_g = model(batch, LOD_POWER, d_train=False, ae=False)
             tracker.update(dict(loss_g=loss_g))
             loss_g.backward()
             decoder_optimizer.step()
 
             encoder_optimizer.zero_grad()
             decoder_optimizer.zero_grad()
-            lae = model(batch, LOD_POWER, 1, d_train=True, ae=True)
+            lae = model(batch, LOD_POWER, d_train=True, ae=True)
             tracker.update(dict(lae=lae))
             (lae).backward()
             encoder_optimizer.step()

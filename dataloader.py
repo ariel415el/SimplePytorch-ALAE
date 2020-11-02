@@ -6,8 +6,6 @@ import torch.utils.data
 from torchvision import datasets as tv_datasets
 from torch.utils.data import Dataset
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
 
 def get_mnist(data_dir="data"):
     train_dataset = tv_datasets.MNIST(data_dir, train=True, download=True)
@@ -42,7 +40,7 @@ class RequireGradCollator(object):
             return torch.tensor(batch, requires_grad=True, device=self.device, dtype=torch.float32)
 
 
-def get_dataloader(batch_size, test_set=False):
+def get_dataloader(batch_size, device, test_set=False):
     data, _ = get_mnist('../data')
     data = data[2] if test_set else data[0]
     dataset = MNISTDataset(data)
