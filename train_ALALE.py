@@ -55,16 +55,14 @@ def train_mnist():
                   mapping_layers=MAPPING_LAYERS,
                   channels=CHANNELS, device=device
                   )
-    model.train()
-    model.to(device)
+    model.train().to(device)
     test_model = Model(layer_count=LAYER_COUNT,
                   latent_size=LATENT_SPACE_SIZE,
                   mapping_layers=MAPPING_LAYERS,
                   channels=CHANNELS, device=device
                   )
-    test_model.eval()
+    test_model.eval().to(device)
     test_model.requires_grad_(False)
-    test_model.to(device)
 
 
     decoder_optimizer = LREQAdam([
@@ -80,7 +78,7 @@ def train_mnist():
     # Create test dataset
 
     dataloader = get_dataloader(BATCH_SIZE, device=device)
-    test_samples_z = torch.tensor( np.random.RandomState(3456).randn(32, LATENT_SPACE_SIZE)).float().to(device)
+    test_samples_z = torch.tensor(np.random.RandomState(3456).randn(32, LATENT_SPACE_SIZE), dtype=torch.float32).to(device)
     test_dataloader = get_dataloader(batch_size=32, device=device, test_set=True)
     test_samples = next(iter(test_dataloader))
 

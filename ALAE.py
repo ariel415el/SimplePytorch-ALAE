@@ -17,11 +17,6 @@ def generator_logistic_non_saturating(d_result_fake):
     return F.softplus(-d_result_fake).mean()
 
 
-class DLatent(nn.Module):
-    def __init__(self, dlatent_size, layer_count):
-        super(DLatent, self).__init__()
-        buffer = torch.zeros(layer_count, dlatent_size, dtype=torch.float32)
-        self.register_buffer('buff', buffer)
 
 class Model(nn.Module):
     def __init__(self, layer_count, latent_size, mapping_layers, channels, device):
@@ -52,8 +47,6 @@ class Model(nn.Module):
             latent_size=latent_size,
             channels=channels)
 
-        self.dlatent_avg_beta = 0.995
-        self.dlatent_avg = DLatent(latent_size, self.mapping_fl.num_layers)
         self.latent_size = latent_size
         self.style_mixing_prob = 0.9
 
@@ -63,11 +56,6 @@ class Model(nn.Module):
         s = styles.view(styles.shape[0], 1, styles.shape[1])
 
         styles = s.repeat(1, self.mapping_fl.num_layers, 1)
-
-        if self.dlatent_avg_beta is not None:
-            with torch.no_grad():
-                batch_avg = styles.mean(dim=0)
-                self.dlatent_avg.buff.data.lerp_(batch_avg.data, 1.0 - self.dlatent_avg_beta)
 
         rec = self.decoder.forward(styles, lod)
         if return_styles:
@@ -81,10 +69,10 @@ class Model(nn.Module):
         return Z[:,None, :], Z_[:, 0]
 
     def forward(self, x, lod, d_train, ae):
+        z = torch.randn(x.shape[0], self.latent_size, dtype=torch.float32).to(self.device)
         if ae:
             self.encoder.requires_grad_(True)
 
-            z = torch.randn(x.shape[0], self.latent_size).to(self.device)
             s, rec = self.generate(lod, z=z, return_styles=True)
 
             Z, d_result_real = self.encode(rec)
@@ -97,7 +85,6 @@ class Model(nn.Module):
 
         elif d_train:
             with torch.no_grad():
-                z = torch.randn(x.shape[0], self.latent_size).to(self.device)
                 Xp = self.generate(lod, z=z)
 
             self.encoder.requires_grad_(True)
@@ -109,9 +96,6 @@ class Model(nn.Module):
             loss_d = discriminator_logistic_simple_gp(d_result_fake, d_result_real, x)
             return loss_d
         else:
-            with torch.no_grad():
-                z = torch.randn(x.shape[0], self.latent_size).to(self.device)
-
             self.encoder.requires_grad_(False)
 
             rec = self.generate(lod, z=z.detach())
@@ -126,7 +110,9 @@ class Model(nn.Module):
         if hasattr(other, 'module'):
             other = other.module
         with torch.no_grad():
-            params = list(self.mapping_tl.parameters()) + list(self.mapping_fl.parameters()) + list(self.decoder.parameters()) + list(self.encoder.parameters()) + list(self.dlatent_avg.parameters())
-            other_param = list(other.mapping_tl.parameters()) + list(other.mapping_fl.parameters()) + list(other.decoder.parameters()) + list(other.encoder.parameters()) + list(other.dlatent_avg.parameters())
+            params = list(self.mapping_tl.parameters()) + list(self.mapping_fl.parameters()) \
+                     + list(self.decoder.parameters()) + list(self.encoder.parameters())
+            other_param = list(other.mapping_tl.parameters()) + list(other.mapping_fl.parameters()) \
+                          + list(other.decoder.parameters()) + list(other.encoder.parameters())
             for p, p_other in zip(params, other_param):
                 p.data.lerp_(p_other.data, 1.0 - betta)
