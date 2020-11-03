@@ -7,7 +7,8 @@ from torch.nn import init
 
 
 def pixel_norm(x, epsilon=1e-8):
-    return x / torch.rsqrt(torch.mean(x.pow(2.0), dim=1, keepdim=True) + epsilon)
+    # return x / torch.rsqrt(torch.mean(x.pow(2.0), dim=1, keepdim=True) + epsilon)
+    return x * torch.rsqrt(torch.mean(x.pow(2.0), dim=1, keepdim=True) + epsilon)
 
 
 class Linear(nn.Module):
@@ -91,7 +92,7 @@ class GeneratorFC(nn.Module):
 class VAEMappingFromLatent(nn.Module):
     def __init__(self, mapping_layers=5, z_dim=256, w_dim=256):
         super(VAEMappingFromLatent, self).__init__()
-        layers = [Linear(z_dim, w_dim, lrmul=0.1)]
+        layers = [Linear(z_dim, w_dim, lrmul=0.1), nn.LeakyReLU(0.2)]
         for i in range(mapping_layers - 1):
             layers += [Linear(w_dim, w_dim, lrmul=0.1), nn.LeakyReLU(0.2)]
         self.mapping = torch.nn.Sequential(*layers)
@@ -109,11 +110,11 @@ class DiscriminatorFC(nn.Module):
         assert mapping_layers >= 2
         layers = []
         for i in range(mapping_layers):
-            out_dim = 1 if i == mapping_layers - 1 else w_dim
+            out_dim = 50 if i == mapping_layers - 1 else w_dim
             layers += [Linear(w_dim, out_dim, lrmul=0.1), nn.LeakyReLU(0.2)]
         self.mapping = torch.nn.Sequential(*layers)
 
     def forward(self, x):
-        x = self.mapping(x)
+        x = self.mapping(x)[:,0]
         x = x.view(-1)
         return x

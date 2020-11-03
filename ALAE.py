@@ -17,9 +17,8 @@ def generator_logistic_non_saturating(d_result_fake):
 
 
 class Model(nn.Module):
-    def __init__(self, layer_count, latent_size, mapping_layers, device):
+    def __init__(self, latent_size, mapping_layers, device):
         super(Model, self).__init__()
-        self.layer_count = layer_count
         self.device = device
 
         self.discriminator = DiscriminatorFC(
@@ -36,7 +35,6 @@ class Model(nn.Module):
         self.encoder = EncoderFC(latent_size=latent_size)
 
         self.latent_size = latent_size
-        self.style_mixing_prob = 0.9
 
     def generate(self, z, return_w=False):
 
@@ -63,16 +61,16 @@ class Model(nn.Module):
 
             assert W_from_z.shape == W_from_img.shape
 
-            W_reconstruction_loss = torch.mean(((W_from_z - W_from_img.detach())**2))
+            W_reconstruction_loss = torch.mean(((W_from_img - W_from_z.detach())**2))
 
             return W_reconstruction_loss
 
         elif d_train:
             with torch.no_grad():
                 fake_images = self.generate(z=batch_z)
-            _, d_result_fake = self.encode(fake_images.detach())
-
             self.encoder.requires_grad_(True)
+
+            _, d_result_fake = self.encode(fake_images.detach())
             _, d_result_real = self.encode(batch_images)
 
             loss_d = discriminator_logistic_simple_gp(d_result_fake, d_result_real, batch_images)

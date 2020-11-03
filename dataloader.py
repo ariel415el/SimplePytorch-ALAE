@@ -63,11 +63,9 @@ def get_dataloader(batch_size, device, test_set=False):
     # data, _ = get_sklearn_digits()
     data = data[2] if test_set else data[0]
     dataset = MNISTDataset(data)
-    kwargs = {'batch_size': batch_size, 'collate_fn': RequireGradCollator(device)}
+    kwargs = {'batch_size': batch_size, 'collate_fn': RequireGradCollator(device), 'shuffle': True}
     if device == "cuda:0":
         kwargs.update({'num_workers': 2,
-                       'pin_memory': True,
-                       'shuffle': True},
-                      )
+                       'pin_memory': True})
     return torch.utils.data.DataLoader(dataset, **kwargs)
 

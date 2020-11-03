@@ -10,14 +10,11 @@ from torch.nn import functional as F
 from torchvision.utils import save_image
 from PIL import Image
 
-BASE_LEARNING_RATE = 0.002
-DECODER_LAYER_TO_RESOLUTION = 8
 OUTPUT_DIR= 'training_outputs_DATASET'
+BASE_LEARNING_RATE = 0.002
 EPOCHS=1000
 LATENT_SPACE_SIZE = 50
-LAYER_COUNT = 4
 MAPPING_LAYERS = 6
-CHANNELS = 1  # Mnist is B&W
 BATCH_SIZE=128
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -33,6 +30,10 @@ def save_sample(epoch, tracker, sample, samplez, model):
 
         W = model.mapping_fl(samplez)
         generation_from_random = model.decoder(W)
+
+        tracker.update(dict(gen_min_val=0.5*(sample_recreation.min() + generation_from_random.min()),
+                            gen_max_val=0.5*(sample_recreation.max() + generation_from_random.max())))
+
 
         resultsample = torch.cat([sample, sample_recreation, generation_from_random], dim=0).cpu()
 
@@ -50,14 +51,12 @@ def save_sample(epoch, tracker, sample, samplez, model):
 def train_mnist():
     tracker = LossTracker(OUTPUT_DIR)
 
-    model = Model(layer_count=LAYER_COUNT,
-                  latent_size=LATENT_SPACE_SIZE,
+    model = Model(latent_size=LATENT_SPACE_SIZE,
                   mapping_layers=MAPPING_LAYERS,
                   device=device
                   )
     model.train().to(device)
-    test_model = Model(layer_count=LAYER_COUNT,
-                  latent_size=LATENT_SPACE_SIZE,
+    test_model = Model(latent_size=LATENT_SPACE_SIZE,
                   mapping_layers=MAPPING_LAYERS,
                   device=device
                   )
