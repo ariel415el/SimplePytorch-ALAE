@@ -6,18 +6,8 @@ import numpy as np
 from torch.nn import init
 
 
-class MappingBlock(nn.Module):
-    def __init__(self, inputs, output, lrmul):
-        super(MappingBlock, self).__init__()
-        self.fc = Linear(inputs, output, lrmul=lrmul)
-
-    def forward(self, x):
-        x = F.leaky_relu(self.fc(x), 0.2)
-        return x
-
-
 def pixel_norm(x, epsilon=1e-8):
-    return x * torch.rsqrt(torch.mean(x.pow(2.0), dim=1, keepdim=True) + epsilon)
+    return x / torch.rsqrt(torch.mean(x.pow(2.0), dim=1, keepdim=True) + epsilon)
 
 
 class Linear(nn.Module):
@@ -51,10 +41,8 @@ class Linear(nn.Module):
 
 
 class EncoderFC(nn.Module):
-    def __init__(self, layer_count, latent_size, channels=3):
+    def __init__(self, latent_size):
         super(EncoderFC, self).__init__()
-        self.layer_count = layer_count
-        self.channels = channels
         self.latent_size = latent_size
 
         self.fc_1 = Linear(28 * 28, 1024)
@@ -78,10 +66,8 @@ class EncoderFC(nn.Module):
 
 
 class GeneratorFC(nn.Module):
-    def __init__(self, layer_count=3, latent_size=128, channels=3):
+    def __init__(self, latent_size=128):
         super(GeneratorFC, self).__init__()
-        self.layer_count = layer_count
-        self.channels = channels
         self.latent_size = latent_size
 
         self.fc_1 = Linear(latent_size, 1024)
@@ -89,10 +75,6 @@ class GeneratorFC(nn.Module):
         self.fc_3 = Linear(1024, 28 * 28)
 
     def decode(self, x):
-        if len(x.shape) == 3:
-            x = x[:, 0]  # no styles
-        x.view(x.shape[0], self.latent_size)
-
         x = self.fc_1(x)
         x = F.leaky_relu(x, 0.2)
         x = self.fc_2(x)
@@ -107,43 +89,31 @@ class GeneratorFC(nn.Module):
 
 
 class VAEMappingFromLatent(nn.Module):
-    def __init__(self, num_layers, mapping_layers=5, latent_size=256, dlatent_size=256, mapping_fmaps=256):
+    def __init__(self, mapping_layers=5, z_dim=256, w_dim=256):
         super(VAEMappingFromLatent, self).__init__()
-        inputs = dlatent_size
-        self.mapping_layers = mapping_layers
-        self.num_layers = num_layers
-        self.map_blocks: nn.ModuleList[MappingBlock] = nn.ModuleList()
-        for i in range(mapping_layers):
-            outputs = latent_size if i == mapping_layers - 1 else mapping_fmaps
-            block = MappingBlock(inputs, outputs, lrmul=0.1)
-            inputs = outputs
-            self.map_blocks.append(block)
-
+        layers = [Linear(z_dim, w_dim, lrmul=0.1)]
+        for i in range(mapping_layers - 1):
+            layers += [Linear(w_dim, w_dim, lrmul=0.1), nn.LeakyReLU(0.2)]
+        self.mapping = torch.nn.Sequential(*layers)
     def forward(self, x):
         x = pixel_norm(x)
 
-        for i in range(self.mapping_layers):
-            x = self.map_blocks[i](x)
+        x = self.mapping(x)
 
-        return x.view(x.shape[0], 1, x.shape[1]).repeat(1, self.num_layers, 1)
+        return x
 
 
-class VAEMappingToLatentNoStyle(nn.Module):
-    def __init__(self, mapping_layers=5, latent_size=256, dlatent_size=256, mapping_fmaps=256):
-        super(VAEMappingToLatentNoStyle, self).__init__()
-        inputs = latent_size
-        self.mapping_layers = mapping_layers
-        self.map_blocks: nn.ModuleList[MappingBlock] = nn.ModuleList()
+class DiscriminatorFC(nn.Module):
+    def __init__(self, mapping_layers, w_dim=256):
+        super(DiscriminatorFC, self).__init__()
+        assert mapping_layers >= 2
+        layers = []
         for i in range(mapping_layers):
-            outputs = dlatent_size if i == mapping_layers - 1 else mapping_fmaps
-            block = Linear(inputs, outputs, lrmul=0.1)
-            inputs = outputs
-            self.map_blocks.append(block)
+            out_dim = 1 if i == mapping_layers - 1 else w_dim
+            layers += [Linear(w_dim, out_dim, lrmul=0.1), nn.LeakyReLU(0.2)]
+        self.mapping = torch.nn.Sequential(*layers)
 
     def forward(self, x):
-        for i in range(self.mapping_layers):
-            if i == self.mapping_layers - 1:
-                x = self.map_blocks[i](x)
-            else:
-                x = self.map_blocks[i](x)
+        x = self.mapping(x)
+        x = x.view(-1)
         return x

@@ -12,7 +12,7 @@ from PIL import Image
 
 BASE_LEARNING_RATE = 0.002
 DECODER_LAYER_TO_RESOLUTION = 8
-OUTPUT_DIR= 'training_outputs_DATASET_no_lod'
+OUTPUT_DIR= 'training_outputs_DATASET'
 EPOCHS=1000
 LATENT_SPACE_SIZE = 50
 LAYER_COUNT = 4
@@ -28,17 +28,18 @@ def save_sample(epoch, tracker, sample, samplez, model):
     with torch.no_grad():
         model.eval()
 
-        Z, _ = model.encode(sample)
-        Z = Z.repeat(1, model.mapping_fl.num_layers, 1)
-        sample_recreation = model.decoder(Z)
+        W, _ = model.encode(sample)
+        sample_recreation = model.decoder(W)
 
-        Z = model.mapping_fl(samplez)
-        generation_from_random = model.decoder(Z)
-        sample_upscaled = F.interpolate(sample, sample_recreation.shape[2])
+        W = model.mapping_fl(samplez)
+        generation_from_random = model.decoder(W)
 
-        resultsample = torch.cat([sample_upscaled, sample_recreation, generation_from_random], dim=0)
+        resultsample = torch.cat([sample, sample_recreation, generation_from_random], dim=0).cpu()
 
-        resultsample = (resultsample*0.5 + 0.5).cpu()
+        # Normalize images from -1,1 to 0, 1.
+        # Eventhough train samples are in this range (-1,1), the generated image may not. But this should diminish as
+        # raining continues or else the discriminator can detect them. Anyway save_image clamps it to 0,1
+        resultsample = resultsample * 0.5 + 0.5
 
         tracker.register_means(epoch)
         tracker.plot()
@@ -52,13 +53,13 @@ def train_mnist():
     model = Model(layer_count=LAYER_COUNT,
                   latent_size=LATENT_SPACE_SIZE,
                   mapping_layers=MAPPING_LAYERS,
-                  channels=CHANNELS, device=device
+                  device=device
                   )
     model.train().to(device)
     test_model = Model(layer_count=LAYER_COUNT,
                   latent_size=LATENT_SPACE_SIZE,
                   mapping_layers=MAPPING_LAYERS,
-                  channels=CHANNELS, device=device
+                  device=device
                   )
     test_model.eval().to(device)
     test_model.requires_grad_(False)
@@ -70,7 +71,7 @@ def train_mnist():
 
     encoder_optimizer = LREQAdam([
         {'params': model.encoder.parameters()},
-        {'params': model.mapping_tl.parameters()},
+        {'params': model.discriminator.parameters()},
     ], lr=BASE_LEARNING_RATE, betas=(0.0, 0.99), weight_decay=0)
 
     # Create test dataset

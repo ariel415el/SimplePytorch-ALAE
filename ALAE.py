@@ -1,5 +1,4 @@
 from models import *
-import random
 
 
 def discriminator_logistic_simple_gp(d_result_fake, d_result_real, reals, r1_gamma=10.0):
@@ -17,90 +16,72 @@ def generator_logistic_non_saturating(d_result_fake):
     return F.softplus(-d_result_fake).mean()
 
 
-
 class Model(nn.Module):
-    def __init__(self, layer_count, latent_size, mapping_layers, channels, device):
+    def __init__(self, layer_count, latent_size, mapping_layers, device):
         super(Model, self).__init__()
         self.layer_count = layer_count
         self.device = device
 
-        self.mapping_tl = VAEMappingToLatentNoStyle(
-            latent_size=latent_size,
-            dlatent_size=latent_size,
-            mapping_fmaps=latent_size,
+        self.discriminator = DiscriminatorFC(
+            w_dim=latent_size,
             mapping_layers=3)
 
         self.mapping_fl = VAEMappingFromLatent(
-            num_layers=2 * layer_count,
-            latent_size=latent_size,
-            dlatent_size=latent_size,
-            mapping_fmaps=latent_size,
+            z_dim=latent_size,
+            w_dim=latent_size,
             mapping_layers=mapping_layers)
 
-        self.decoder = GeneratorFC(
-            layer_count=layer_count,
-            latent_size=latent_size,
-            channels=channels)
+        self.decoder = GeneratorFC(latent_size=latent_size)
 
-        self.encoder = EncoderFC(
-            layer_count=layer_count,
-            latent_size=latent_size,
-            channels=channels)
+        self.encoder = EncoderFC(latent_size=latent_size)
 
         self.latent_size = latent_size
         self.style_mixing_prob = 0.9
 
-    def generate(self, z, return_styles=False):
+    def generate(self, z, return_w=False):
 
-        styles = self.mapping_fl(z)[:, 0]
-        s = styles.view(styles.shape[0], 1, styles.shape[1])
+        w_vector = self.mapping_fl(z)
 
-        styles = s.repeat(1, self.mapping_fl.num_layers, 1)
-
-        rec = self.decoder.forward(styles)
-        if return_styles:
-            return s, rec
+        image = self.decoder.forward(w_vector)
+        if return_w:
+            return w_vector, image
         else:
-            return rec
+            return image
 
-    def encode(self, x):
-        Z = self.encoder(x)
-        Z_ = self.mapping_tl(Z)
-        return Z[:,None, :], Z_[:, 0]
+    def encode(self, imgs):
+        w_vecs = self.encoder(imgs)
+        critic_scores = self.discriminator(w_vecs)
+        return w_vecs, critic_scores
 
-    def forward(self, x, d_train, ae):
-        z = torch.randn(x.shape[0], self.latent_size, dtype=torch.float32).to(self.device)
+    def forward(self, batch_images, d_train, ae):
+        batch_z = torch.randn(batch_images.shape[0], self.latent_size, dtype=torch.float32).to(self.device)
         if ae:
+            W_from_z, fake_img = self.generate(z=batch_z, return_w=True)
+
             self.encoder.requires_grad_(True)
+            W_from_img, _ = self.encode(fake_img)
 
-            s, rec = self.generate(z=z, return_styles=True)
+            assert W_from_z.shape == W_from_img.shape
 
-            Z, _ = self.encode(rec)
+            W_reconstruction_loss = torch.mean(((W_from_z - W_from_img.detach())**2))
 
-            assert Z.shape == s.shape
-
-            Lae = torch.mean(((Z - s.detach())**2))
-
-            return Lae
+            return W_reconstruction_loss
 
         elif d_train:
             with torch.no_grad():
-                Xp = self.generate(z=z)
+                fake_images = self.generate(z=batch_z)
+            _, d_result_fake = self.encode(fake_images.detach())
 
             self.encoder.requires_grad_(True)
+            _, d_result_real = self.encode(batch_images)
 
-            _, d_result_real = self.encode(x)
-
-            _, d_result_fake = self.encode(Xp.detach())
-
-            loss_d = discriminator_logistic_simple_gp(d_result_fake, d_result_real, x)
+            loss_d = discriminator_logistic_simple_gp(d_result_fake, d_result_real, batch_images)
             return loss_d
         else:
             self.encoder.requires_grad_(False)
+            fake_images = self.generate(z=batch_z.detach())
 
-            rec = self.generate(z=z.detach())
-
-            _, d_result_fake = self.encode(rec)
+            _, d_result_fake = self.encode(fake_images)
 
             loss_g = generator_logistic_non_saturating(d_result_fake)
 
@@ -110,9 +91,9 @@ class Model(nn.Module):
         if hasattr(other, 'module'):
             other = other.module
         with torch.no_grad():
-            params = list(self.mapping_tl.parameters()) + list(self.mapping_fl.parameters()) \
+            params = list(self.discriminator.parameters()) + list(self.mapping_fl.parameters()) \
                      + list(self.decoder.parameters()) + list(self.encoder.parameters())
-            other_param = list(other.mapping_tl.parameters()) + list(other.mapping_fl.parameters()) \
+            other_param = list(other.discriminator.parameters()) + list(other.mapping_fl.parameters()) \
                           + list(other.decoder.parameters()) + list(other.encoder.parameters())
             for p, p_other in zip(params, other_param):
                 p.data.lerp_(p_other.data, 1.0 - betta)
