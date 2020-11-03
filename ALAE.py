@@ -50,14 +50,14 @@ class Model(nn.Module):
         self.latent_size = latent_size
         self.style_mixing_prob = 0.9
 
-    def generate(self, lod, z, return_styles=False):
+    def generate(self, z, return_styles=False):
 
         styles = self.mapping_fl(z)[:, 0]
         s = styles.view(styles.shape[0], 1, styles.shape[1])
 
         styles = s.repeat(1, self.mapping_fl.num_layers, 1)
 
-        rec = self.decoder.forward(styles, lod)
+        rec = self.decoder.forward(styles)
         if return_styles:
             return s, rec
         else:
@@ -68,14 +68,14 @@ class Model(nn.Module):
         Z_ = self.mapping_tl(Z)
         return Z[:,None, :], Z_[:, 0]
 
-    def forward(self, x, lod, d_train, ae):
+    def forward(self, x, d_train, ae):
         z = torch.randn(x.shape[0], self.latent_size, dtype=torch.float32).to(self.device)
         if ae:
             self.encoder.requires_grad_(True)
 
-            s, rec = self.generate(lod, z=z, return_styles=True)
+            s, rec = self.generate(z=z, return_styles=True)
 
-            Z, d_result_real = self.encode(rec)
+            Z, _ = self.encode(rec)
 
             assert Z.shape == s.shape
 
@@ -85,7 +85,7 @@ class Model(nn.Module):
 
         elif d_train:
             with torch.no_grad():
-                Xp = self.generate(lod, z=z)
+                Xp = self.generate(z=z)
 
             self.encoder.requires_grad_(True)
 
@@ -98,7 +98,7 @@ class Model(nn.Module):
         else:
             self.encoder.requires_grad_(False)
 
-            rec = self.generate(lod, z=z.detach())
+            rec = self.generate(z=z.detach())
 
             _, d_result_fake = self.encode(rec)
 

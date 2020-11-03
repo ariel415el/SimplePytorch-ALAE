@@ -62,7 +62,6 @@ class EncoderFC(nn.Module):
         self.fc_3 = Linear(1024, latent_size)
 
     def encode(self, x):
-        x = F.interpolate(x, 28)
         x = x.view(x.shape[0], 28 * 28)
 
         x = self.fc_1(x)
@@ -89,7 +88,7 @@ class GeneratorFC(nn.Module):
         self.fc_2 = Linear(1024, 1024)
         self.fc_3 = Linear(1024, 28 * 28)
 
-    def decode(self, x, lod):
+    def decode(self, x):
         if len(x.shape) == 3:
             x = x[:, 0]  # no styles
         x.view(x.shape[0], self.latent_size)
@@ -101,11 +100,10 @@ class GeneratorFC(nn.Module):
         x = self.fc_3(x)
 
         x = x.view(x.shape[0], 1, 28, 28)
-        x = F.interpolate(x, 2 ** (2 + lod))
         return x
 
-    def forward(self, x, lod):
-        return self.decode(x, lod)
+    def forward(self, x):
+        return self.decode(x)
 
 
 class VAEMappingFromLatent(nn.Module):

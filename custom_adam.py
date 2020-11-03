@@ -22,6 +22,7 @@ from torch.optim.optimizer import Optimizer
 class LREQAdam(Optimizer):
     def __init__(self, params, lr=1e-3, betas=(0.0, 0.99), eps=1e-8,
                  weight_decay=0):
+        assert betas[0] == 0, "LREQAdam does not use first moment of gradient at all"
         beta_2 = betas[1]
         defaults = dict(lr=lr, beta_2=beta_2, eps=eps,
                         weight_decay=weight_decay)
@@ -66,7 +67,7 @@ class LREQAdam(Optimizer):
                 if group['weight_decay'] != 0:
                     grad.add_(group['weight_decay'], p.data / p.coef)
 
-                # Decay the first and second moment running average coefficient
+                # Decay the second moment running average coefficient
                 exp_avg_sq.mul_(beta_2).addcmul_(grad, grad, value=1 - beta_2)
                 denom = exp_avg_sq.sqrt().add_(group['eps'])
 
