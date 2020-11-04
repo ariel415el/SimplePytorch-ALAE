@@ -18,18 +18,21 @@ MAPPING_LAYERS = 6
 BATCH_SIZE=128
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-# device = torch.device("cpu")
 
 
 def save_sample(epoch, tracker, sample, samplez, model):
+    """
+
+    Save a debug image containig real images, their reconstruction and fake generated images
+    """
     with torch.no_grad():
         model.eval()
 
         W, _ = model.encode(sample)
-        sample_recreation = model.decoder(W)
+        sample_recreation = model.G(W)
 
-        W = model.mapping_fl(samplez)
-        generation_from_random = model.decoder(W)
+        W = model.F(samplez)
+        generation_from_random = model.G(W)
 
         tracker.update(dict(gen_min_val=0.5*(sample_recreation.min() + generation_from_random.min()),
                             gen_max_val=0.5*(sample_recreation.max() + generation_from_random.max())))
@@ -51,26 +54,17 @@ def save_sample(epoch, tracker, sample, samplez, model):
 def train_mnist():
     tracker = LossTracker(OUTPUT_DIR)
 
-    model = Model(latent_size=LATENT_SPACE_SIZE,
-                  mapping_layers=MAPPING_LAYERS,
-                  device=device
-                  )
+    model = Model(latent_size=LATENT_SPACE_SIZE, mapping_layers=MAPPING_LAYERS,  device=device)
     model.train().to(device)
-    test_model = Model(latent_size=LATENT_SPACE_SIZE,
-                  mapping_layers=MAPPING_LAYERS,
-                  device=device
-                  )
-    test_model.eval().to(device)
-    test_model.requires_grad_(False)
 
     decoder_optimizer = LREQAdam([
-        {'params': model.decoder.parameters()},
-        {'params': model.mapping_fl.parameters()}
+        {'params': model.G.parameters()},
+        {'params': model.F.parameters()}
     ], lr=BASE_LEARNING_RATE, betas=(0.0, 0.99), weight_decay=0)
 
     encoder_optimizer = LREQAdam([
-        {'params': model.encoder.parameters()},
-        {'params': model.discriminator.parameters()},
+        {'params': model.E.parameters()},
+        {'params': model.D.parameters()},
     ], lr=BASE_LEARNING_RATE, betas=(0.0, 0.99), weight_decay=0)
 
     # Create test dataset
@@ -102,10 +96,7 @@ def train_mnist():
             encoder_optimizer.step()
             decoder_optimizer.step()
 
-            betta = 0.5 ** (BATCH_SIZE / (10 * 1000.0))
-            test_model.lerp(model, betta)
-
-        save_sample(epoch, tracker, test_samples, test_samples_z, test_model)
+        save_sample(epoch, tracker, test_samples, test_samples_z, model)
 
 
 if __name__ == '__main__':
