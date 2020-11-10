@@ -109,10 +109,9 @@ def get_mnist(data_dir):
     Returns an LFW train and val datalsets
     """
     download_mnist(data_dir)
-    mnist_dim = MNIST_WORKING_DIM
     train_data = torch.load(os.path.join(data_dir, "train_data.pt"))
     test_data = torch.load(os.path.join(data_dir, "test_data.pt"))
-    train_dataset, val_dataset =  SimpleDataset(train_data), SimpleDataset(test_data), mnist_dim
+    train_dataset, val_dataset = SimpleDataset(train_data), SimpleDataset(test_data)
 
     return train_dataset, val_dataset, MNIST_WORKING_DIM
 

@@ -1,5 +1,5 @@
 import torch
-from ALAE_new import ALAE
+from ALAE import ALAE
 from datasets import get_dataset, get_dataloader
 import numpy as np
 
@@ -7,7 +7,7 @@ OUTPUT_DIR= 'training_dir_3_opts'
 LATENT_SPACE_SIZE = 50
 NUMED_BUG_IMAGES=32
 EPOCHS=100
-DATASET="LFW"
+DATASET="mnist"
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 

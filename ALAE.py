@@ -20,12 +20,12 @@ class ALAE:
     def __init__(self, latent_size, device, hyper_parameters, image_dim):
         self.device = device
         self.latent_size = latent_size
-        self.hp = {'lr': 0.002, "batch_size": 128, 'mapping_layers': 6, "g_penalty_coeff": 10}
+        self.hp = {'lr': 0.002, "batch_size": 128, 'mapping_layers': 6, "g_penalty_coeff": 10, 'descriminator_layers':3}
         self.hp.update(hyper_parameters
                        )
-        self.D = DiscriminatorFC(w_dim=latent_size,mapping_layers=3).to(device).train()
+        self.D = DiscriminatorFC(w_dim=latent_size, num_layers=self.hp['descriminator_layers']).to(device).train()
 
-        self.F = VAEMappingFromLatent(z_dim=latent_size, w_dim=latent_size, mapping_layers=self.hp['mapping_layers']).to(device).train()
+        self.F = MappingFromLatent(z_dim=latent_size, w_dim=latent_size, num_layers=self.hp['mapping_layers']).to(device).train()
 
         self.G = GeneratorFC(output_size=image_dim, latent_size=latent_size).to(device).train()
 
