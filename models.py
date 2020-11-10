@@ -11,9 +11,16 @@ def pixel_norm(x, epsilon=1e-8):
     return x * torch.rsqrt(torch.mean(x.pow(2.0), dim=1, keepdim=True) + epsilon)
 
 
-class Linear(nn.Module):
+class LREQ_FC_Layer(nn.Module):
+    """
+    This is a equlized learning rate version of a linear unit.
+    It initializes weights with N(0,1).
+    The weights are supposed to be divided by a constant each forward but this implementation is rather different.
+    For more information see "PROGRESSIVE GROWING OF GANS FOR IMPROVED QUALITY, STABILITY,AND VARIATION"
+
+    """
     def __init__(self, in_features, out_features, bias=True, gain=np.sqrt(2.0), lrmul=1.0):
-        super(Linear, self).__init__()
+        super(LREQ_FC_Layer, self).__init__()
         self.in_features = in_features
         self.weight = Parameter(torch.Tensor(out_features, in_features))
         if bias:
@@ -42,16 +49,17 @@ class Linear(nn.Module):
 
 
 class EncoderFC(nn.Module):
-    def __init__(self, latent_size):
+    def __init__(self, input_size, latent_size):
         super(EncoderFC, self).__init__()
         self.latent_size = latent_size
+        self.input_size = input_size
 
-        self.fc_1 = Linear(28 * 28, 1024)
-        self.fc_2 = Linear(1024, 1024)
-        self.fc_3 = Linear(1024, latent_size)
+        self.fc_1 = LREQ_FC_Layer(input_size ** 2, 1024)
+        self.fc_2 = LREQ_FC_Layer(1024, 1024)
+        self.fc_3 = LREQ_FC_Layer(1024, latent_size)
 
     def encode(self, x):
-        x = x.view(x.shape[0], 28 * 28)
+        x = x.view(x.shape[0], self.input_size**2)
 
         x = self.fc_1(x)
         x = F.leaky_relu(x, 0.2)
@@ -67,13 +75,14 @@ class EncoderFC(nn.Module):
 
 
 class GeneratorFC(nn.Module):
-    def __init__(self, latent_size=128):
+    def __init__(self, latent_size, output_size):
         super(GeneratorFC, self).__init__()
         self.latent_size = latent_size
+        self.output_size = output_size
 
-        self.fc_1 = Linear(latent_size, 1024)
-        self.fc_2 = Linear(1024, 1024)
-        self.fc_3 = Linear(1024, 28 * 28)
+        self.fc_1 = LREQ_FC_Layer(latent_size, 1024)
+        self.fc_2 = LREQ_FC_Layer(1024, 1024)
+        self.fc_3 = LREQ_FC_Layer(1024, self.output_size ** 2)
 
     def decode(self, x):
         x = self.fc_1(x)
@@ -82,7 +91,7 @@ class GeneratorFC(nn.Module):
         x = F.leaky_relu(x, 0.2)
         x = self.fc_3(x)
 
-        x = x.view(x.shape[0], 1, 28, 28)
+        x = x.view(x.shape[0], 1, self.output_size, self.output_size)
         return x
 
     def forward(self, x):
@@ -92,10 +101,11 @@ class GeneratorFC(nn.Module):
 class VAEMappingFromLatent(nn.Module):
     def __init__(self, mapping_layers=5, z_dim=256, w_dim=256):
         super(VAEMappingFromLatent, self).__init__()
-        layers = [Linear(z_dim, w_dim, lrmul=0.1), nn.LeakyReLU(0.2)]
+        layers = [LREQ_FC_Layer(z_dim, w_dim, lrmul=0.1), nn.LeakyReLU(0.2)]
         for i in range(mapping_layers - 1):
-            layers += [Linear(w_dim, w_dim, lrmul=0.1), nn.LeakyReLU(0.2)]
+            layers += [LREQ_FC_Layer(w_dim, w_dim, lrmul=0.1), nn.LeakyReLU(0.2)]
         self.mapping = torch.nn.Sequential(*layers)
+
     def forward(self, x):
         x = pixel_norm(x)
 
@@ -111,7 +121,7 @@ class DiscriminatorFC(nn.Module):
         layers = []
         for i in range(mapping_layers):
             out_dim = 50 if i == mapping_layers - 1 else w_dim
-            layers += [Linear(w_dim, out_dim, lrmul=0.1), nn.LeakyReLU(0.2)]
+            layers += [LREQ_FC_Layer(w_dim, out_dim, lrmul=0.1), nn.LeakyReLU(0.2)]
         self.mapping = torch.nn.Sequential(*layers)
 
     def forward(self, x):
