@@ -67,7 +67,7 @@ class ALAE:
         return torch.mean(((batch_reconstructed_w - batch_w.detach())**2))
 
     def train(self, train_dataset, test_data, epohcs, output_dir):
-        train_dataloader = get_dataloader(train_dataset, self.hp['batch_size'], device=self.device)
+        train_dataloader = get_dataloader(train_dataset, self.hp['batch_size'], resize=None, device=self.device)
         tracker = LossTracker(output_dir)
         for epoch in range(epohcs):
             for batch_real_data in tqdm(train_dataloader):

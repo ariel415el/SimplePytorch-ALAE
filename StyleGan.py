@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 RESOLUTIONS = [4, 8, 16, 32, 64]
 LEARNING_RATES = [0.001, 0.001, 0.001, 0.001, 0.001, ]
-TRAIN_PHASE_LENGTH = 100_000
+TRAIN_PHASE_LENGTH = 128 * 30
 BATCH_SIZES = [128, 128, 128, 128, 128]
 N_CRITIC=1
 
@@ -37,7 +37,7 @@ class StyleGan:
         self.hp = {'lr': 0.002, 'g_penalty_coeff':10.0}
         self.hp.update(hyper_parameters)
 
-        self.F = MappingFromLatent(num_layers=8, input_dim=z_dim, out_dim=w_dim)
+        self.F = MappingFromLatent(num_layers=8, input_dim=z_dim, out_dim=w_dim).to(device).train()
 
         self.G = StylleGanGenerator(latent_dim=w_dim, out_dim=image_dim).to(device).train()
 
@@ -105,14 +105,10 @@ class StyleGan:
         with torch.no_grad():
             generated_images = self.G(self.F(samples_z), res_idx, alpha)
             generated_images = torch.nn.functional.interpolate(generated_images, size=samples.shape[-1])
-            resultsample = torch.cat([samples, generated_images], dim=0).cpu()
 
-            # Normalize images from -1,1 to 0, 1.
-            # Eventhough train samples are in this range (-1,1), the generated image may not. But this should diminish as
-            # raining continues or else the discriminator can detect them. Anyway save_image clamps it to 0,1
-            resultsample = resultsample * 0.5 + 0.5
+            generated_images = generated_images * 0.5 + 0.5
 
             tracker.register_means(gs)
             tracker.plot()
             f = os.path.join(output_dir, f"gs-{gs}_res-{RESOLUTIONS[res_idx]}x{RESOLUTIONS[res_idx]}_alpha-{alpha}.jpg")
-            save_image(resultsample, f, nrow=len(samples))
+            save_image(generated_images, f, nrow=len(samples))

@@ -87,8 +87,7 @@ class StyleGeneratorBlock(nn.Module):
         if is_first_block:
             self.conv1 = ConstantInput(out_channels, 4)
         else:
-            self.conv1 = torch.nn.Sequential(nn.Upsample(scale_factor=2, mode='nearest'),
-                                             Lreq_Conv2d(in_channels, out_channels, 3, padding=1))
+            self.conv1 = Lreq_Conv2d(in_channels, out_channels, 3, padding=1)
 
         self.style_affine_transform_1 = StyleAffineTransform(latent_dim, out_channels)
         self.style_affine_transform_2 = StyleAffineTransform(latent_dim, out_channels)
@@ -125,7 +124,6 @@ class StylleGanGenerator(nn.Module):
                 StyleGeneratorBlock(latent_dim, 32, 16)  # 64x64 img
             ]
         )
-
         self.to_rgb = nn.ModuleList(
             [
                 Lreq_Conv2d(256, 3, 1, 0),
@@ -140,7 +138,7 @@ class StylleGanGenerator(nn.Module):
         generated_img = None
         feature_maps_upsample = None
         feature_maps = None
-        noise = torch.randn((w.shape[0], 1, 1, 1), dtype=torch.float32)
+        noise = torch.randn((w.shape[0], 1, 1, 1), dtype=torch.float32).to(w.device)
         for i, block in enumerate(self.progression):
             if i == 0:
                 feature_maps = block(w, w, noise) # TODO solve the issue where thi needs an input
@@ -174,7 +172,7 @@ class PGGanDiscriminator(nn.Module):
             Lreq_Conv2d(3, 16, 1, 0) # 64x64 imgs
         ])
         self.convs  = nn.ModuleList([
-            nn.Sequential(Lreq_Conv2d(16, 32, 3, 1), nn.LeakyReLU(0.2), Lreq_Conv2d(16, 32, 3, 1), nn.LeakyReLU(0.2)), # 64x64 images start from here
+            nn.Sequential(Lreq_Conv2d(16, 32, 3, 1), nn.LeakyReLU(0.2), Lreq_Conv2d(32, 32, 3, 1), nn.LeakyReLU(0.2)), # 64x64 images start from here
             nn.Sequential(Lreq_Conv2d(32, 64, 3, 1), nn.LeakyReLU(0.2), Lreq_Conv2d(64, 64, 3, 1), nn.LeakyReLU(0.2)), # 32x32 images start from here
             nn.Sequential(Lreq_Conv2d(64, 128, 3, 1), nn.LeakyReLU(0.2), Lreq_Conv2d(128, 128, 3, 1), nn.LeakyReLU(0.2)), # 16x16 images start from here
             nn.Sequential(Lreq_Conv2d(128, 256, 3, 1), nn.LeakyReLU(0.2), Lreq_Conv2d(256, 256, 3, 1), nn.LeakyReLU(0.2)), # 8x8 images start from here
@@ -199,11 +197,11 @@ class PGGanDiscriminator(nn.Module):
             # Conv
             feature_maps = self.convs[i](feature_maps)
 
-            # # Not the final layer
-            # if i != self.n_layers - 1:
-            #     # Downsample for further usage
-            #     downsampled_feature_maps = nn.functional.interpolate(feature_maps, scale_factor=0.5, mode='bilinear',
-            #                                                          align_corners=False)
+            # Not the final layer
+            if i != self.n_layers - 1:
+                # Downsample for further usage
+                feature_maps = nn.functional.interpolate(feature_maps, scale_factor=0.5, mode='bilinear',
+                                                                     align_corners=False)
             #     # Alpha set, combine the result of different layers when input
             #     if i == final_resolution_idx and 0 <= alpha < 1:
             #         next_feature_maps = self.from_rgbs[i + 1](image)
