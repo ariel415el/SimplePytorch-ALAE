@@ -92,6 +92,7 @@ class NoiseScaler(nn.Module):
 
     def __init__(self, n_channel):
         super().__init__()
+        # per channel wiehgt
         self.weight = nn.Parameter(torch.zeros((1, n_channel, 1, 1)))
 
     def forward(self, noise):
@@ -103,13 +104,13 @@ class ConstantInput(nn.Module):
     """
     A simple constant parameter with a Module functionality
     """
-    def __init__(self, channel, size=4):
+    def __init__(self, out_channels, size=4):
         super().__init__()
-
-        self.const = nn.Parameter(torch.randn(1, channel, size, size))
+        self.out_channels = out_channels
+        self.const = nn.Parameter(torch.randn(1, out_channels, size, size))
 
     def forward(self, input):
-        out = self.input.repeat(input.shape[0], 1, 1, 1)
+        out = self.const.repeat(input.shape[0], 1, 1, 1)
 
         return out
 
@@ -132,7 +133,7 @@ class AdaIn(nn.Module):
 
 
 class Lreq_Conv2d(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=1, output_padding=0, dilation=1, bias=True,  lrmul=1.0):
+    def __init__(self, in_channels, out_channels, kernel_size, padding=1, stride=1, output_padding=0, dilation=1, bias=True, lrmul=1.0):
         super(Lreq_Conv2d, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -149,7 +150,7 @@ class Lreq_Conv2d(nn.Module):
             self.bias = Parameter(torch.Tensor(out_channels))
         else:
             self.register_parameter('bias', None)
-        self.std = self.np.sqrt(2.0) / np.sqrt(self.fan_in)
+        self.std = np.sqrt(2.0) / np.sqrt(self.fan_in)
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -163,7 +164,4 @@ class Lreq_Conv2d(nn.Module):
                 self.bias.zero_()
 
     def forward(self, x):
-        w = self.weight
-
-        return F.conv2d(x, w, self.bias, stride=self.stride, padding=self.padding,
-                        dilation=self.dilation, groups=self.groups)
+        return F.conv2d(x, self.weight, self.bias, stride=self.stride, padding=self.padding, dilation=self.dilation)

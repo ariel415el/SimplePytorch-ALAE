@@ -96,7 +96,7 @@ def get_lfw(data_dir):
     download_lwf(data_dir)
     data = torch.load(os.path.join(data_dir, "all_imgs.pt"))
 
-    data = data[:,0].reshape(-1, 1, 64, 64)
+    # data = data[:,0].reshape(-1, 1, 64, 64)
 
     dataset = SimpleDataset(data)
     val_size = int(len(dataset) * VAL_SET_PORTION)
@@ -164,20 +164,23 @@ def get_dataset(data_root, dataset_name):
 
 
 class RequireGradCollator(object):
-    def __init__(self, device):
+    def __init__(self, resize, device):
         self.device = device
+        self.resize = resize
 
     def __call__(self, batch):
         with torch.no_grad():
             # requires_grad=True is necessary for the gradient penalty calculation
             # return torch.tensor(batch, requires_grad=True, device=self.device, dtype=torch.float32)
             batch_tensor = torch.stack(batch).to(self.device).float()
+            if self.resize is not None:
+                batch_tensor = torch.nn.functional.interpolate(batch_tensor, (self.resize, self.resize))
             batch_tensor.requires_grad = True
             return batch_tensor
 
 
-def get_dataloader(dataset, batch_size, device):
-    kwargs = {'batch_size': batch_size, 'shuffle': True, 'collate_fn': RequireGradCollator(device)}
+def get_dataloader(dataset, batch_size, resize, device):
+    kwargs = {'batch_size': batch_size, 'shuffle': True, 'collate_fn': RequireGradCollator(resize, device)}
     if device == "cuda:0":
         kwargs.update({'num_workers': 2,
                        'pin_memory': True})
