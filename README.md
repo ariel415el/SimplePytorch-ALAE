@@ -5,7 +5,7 @@ Official implementation https://github.com/podgorskiy/ALAE
 
 # Step 1: Implement FC-ALAE and train on mnist
 The training result of 100 epochs
-![text](Training_dir/ALAE_mnist/training_fc.gif)
+![text](assets/FC-ALAE_mnist_100-epochs.gif)
 # Step 2: Implement Style-GAN
 # Step 3: Implement Style-ALE on FFGQ
 
