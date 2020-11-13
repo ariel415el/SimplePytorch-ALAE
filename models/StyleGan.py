@@ -34,7 +34,7 @@ class StyleGan:
     def __init__(self, z_dim, w_dim, image_dim, hyper_parameters, device):
         self.device = device
         self.z_dim = z_dim
-        self.hp = {'lr': 0.002, 'g_penalty_coeff':10.0}
+        self.hp = {'lr': 0.002, 'g_penalty_coeff':10.0, 'dump_imgs_freq': 500}
         self.hp.update(hyper_parameters)
 
         self.F = MappingFromLatent(num_layers=8, input_dim=z_dim, out_dim=w_dim).to(device).train()
@@ -77,7 +77,7 @@ class StyleGan:
             batchs_in_phase = TRAIN_PHASE_LENGTH // BATCH_SIZES[res_idx]
             dataloader = EndlessDataloader(get_dataloader(train_dataset, BATCH_SIZES[res_idx], resize=res, device=self.device))
             for i in range(batchs_in_phase * 2) :
-                alpha = min(1, i / batchs_in_phase) # < 1 in the first half and 1 in the second
+                alpha = min(1.0, i / batchs_in_phase)  # < 1 in the first half and 1 in the second
                 progress_bar.set_description(f"gs-{global_steps}_res-{res}x{res}_alpha-{alpha:.3f}")
                 batch_real_data = dataloader.next()
 
@@ -97,18 +97,17 @@ class StyleGan:
                     tracker.update(dict(loss_g=loss_g))
                 global_steps += 1
 
-                if global_steps % 500 == 1:
-                    self.save_sample( global_steps, tracker, test_data[1], test_data[0], output_dir, res_idx, alpha)
+                if global_steps % self.hp['dump_imgs_freq'] == 0:
+                    self.save_sample(global_steps, tracker, test_data, output_dir, res_idx, alpha)
 
-
-    def save_sample(self, gs, tracker, samples, samples_z, output_dir, res_idx, alpha):
+    def save_sample(self, gs, tracker, samples_z, output_dir, res_idx, alpha):
         with torch.no_grad():
             generated_images = self.G(self.F(samples_z), res_idx, alpha)
-            generated_images = torch.nn.functional.interpolate(generated_images, size=samples.shape[-1])
+            generated_images = torch.nn.functional.interpolate(generated_images, size=RESOLUTIONS[-1])
 
             generated_images = generated_images * 0.5 + 0.5
 
             tracker.register_means(gs)
             tracker.plot()
             f = os.path.join(output_dir, f"gs-{gs}_res-{RESOLUTIONS[res_idx]}x{RESOLUTIONS[res_idx]}_alpha-{alpha}.jpg")
-            save_image(generated_images, f, nrow=len(samples))
+            save_image(generated_images, f, nrow=int(np.sqrt(len(samples_z))))

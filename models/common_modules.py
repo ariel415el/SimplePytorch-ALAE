@@ -149,11 +149,10 @@ class StylleGanGenerator(nn.Module):
             if i == final_resolution_idx:
                 generated_img = self.to_rgb[i](feature_maps)
 
-            #     # blend with upsampled image that havent been passed throw the last block
-            #     if i > 0:
-            #         prev_scale_generated_img = self.to_rgbs[i - 1](feature_maps_upsample)
-            #         generated_img = alpha * generated_img + (1 - alpha) * prev_scale_generated_img
-            #
+                # If there is an already stabilized last previous resolution layer. alpha blend with it
+                if i > 0 and alpha < 1:
+                    generated_img_without_last_block = self.to_rgbs[i - 1](feature_maps_upsample)
+                    generated_img = alpha * generated_img + (1 - alpha) * generated_img_without_last_block
                 break
 
         return generated_img
@@ -185,8 +184,11 @@ class PGGanDiscriminator(nn.Module):
 
     def forward(self, image, final_resolution_idx, alpha=1):
         feature_maps = self.from_rgbs[final_resolution_idx](image)
+        # If there is an already stabilized previous scale layers: Alpha Fade in new discriminator layers
+        if final_resolution_idx > 0 and alpha < 1:
+            down_sampled_image = nn.functional.interpolate(image, scale_factor=0.5, mode='bilinear', align_corners=False)
+            feature_maps = alpha * feature_maps + (1 - alpha) * self.from_rgbs[final_resolution_idx - 1](down_sampled_image)
         for i in range(self.n_layers - final_resolution_idx - 1, self.n_layers):
-
             # Before final layer, do minibatch stddev:  adds a constant std channel
             if i == self.n_layers - 1:
                 res_var = feature_maps.var(0, unbiased=False) + 1e-8 # Avoid zero
@@ -202,15 +204,7 @@ class PGGanDiscriminator(nn.Module):
                 # Downsample for further usage
                 feature_maps = nn.functional.interpolate(feature_maps, scale_factor=0.5, mode='bilinear',
                                                                      align_corners=False)
-            #     # Alpha set, combine the result of different layers when input
-            #     if i == final_resolution_idx and 0 <= alpha < 1:
-            #         next_feature_maps = self.from_rgbs[i + 1](image)
-            #         next_feature_maps = nn.functional.interpolate(next_feature_maps, scale_factor=0.5,
-            #                                                mode = 'bilinear', align_corners=False)
-            #
-            #         feature_maps = alpha * downsampled_feature_maps + (1 - alpha) * next_feature_maps
 
-        # Now, result is [batch, channel(512), 1, 1]
         # Convert it into [batch, channel(512)], so the fully-connetced layer
         # could process it.
         feature_maps = feature_maps.squeeze(2).squeeze(2)
