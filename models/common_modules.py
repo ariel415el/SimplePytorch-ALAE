@@ -1,4 +1,4 @@
-from costume_layers import *
+from utils.costume_layers import *
 
 
 class MappingFromLatent(nn.Module):
