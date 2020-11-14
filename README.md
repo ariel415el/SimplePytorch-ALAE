@@ -7,6 +7,9 @@ Official implementation https://github.com/podgorskiy/ALAE
 The training result of 100 epochs
 ![text](assets/FC-ALAE_mnist_100-epochs.gif)
 # Step 2: Implement Style-GAN
+Style gan with no tricks:
+
+![text](assets/LFW-STyleGan-no_tricks.gif)
 # Step 3: Implement Style-ALE on FFGQ
 
  

@@ -84,9 +84,12 @@ class GeneratorFC(nn.Module):
 class StyleGeneratorBlock(nn.Module):
     def __init__(self, latent_dim, in_channels, out_channels, is_first_block=False):
         super(StyleGeneratorBlock, self).__init__()
+        self.is_first_block = is_first_block
+
         if is_first_block:
-            self.conv1 = ConstantInput(out_channels, 4)
+            self.const_input = nn.Parameter(torch.randn(1, out_channels, 4, 4))
         else:
+            self.blur = LearnablePreScaleBlur(out_channels)
             self.conv1 = Lreq_Conv2d(in_channels, out_channels, 3, padding=1)
 
         self.style_affine_transform_1 = StyleAffineTransform(latent_dim, out_channels)
@@ -98,11 +101,20 @@ class StyleGeneratorBlock(nn.Module):
         self.conv2 = Lreq_Conv2d(out_channels, out_channels, 3, padding=1)
 
     def forward(self, input, latent_w, noise):
-        result = self.conv1(input) + self.noise_scaler_1(noise)
+        if self.is_first_block:
+            assert(input is None)
+            result = self.const_input.repeat(latent_w.shape[0], 1, 1, 1)
+        else:
+            result = upscale_2d(input)
+            result = self.conv1(result)
+            result = self.blur(result)
+
+        result += self.noise_scaler_1(noise)
         result = self.adain(result, self.style_affine_transform_1(latent_w))
         result = self.lrelu(result)
 
-        result = self.conv2(result) + self.noise_scaler_2(noise)
+        result = self.conv2(result)
+        result += self.noise_scaler_2(noise)
         result = self.adain(result, self.style_affine_transform_2(latent_w))
         result = self.lrelu(result)
 
@@ -114,7 +126,6 @@ class StylleGanGenerator(nn.Module):
         assert out_dim == 64
         super(StylleGanGenerator, self).__init__()
         self.latent_dim = latent_dim
-
         self.progression = nn.ModuleList(
             [
                 StyleGeneratorBlock(latent_dim, 512, 256, is_first_block=True),  # 4x4 img
@@ -136,31 +147,52 @@ class StylleGanGenerator(nn.Module):
 
     def forward(self, w, final_resolution_idx, alpha):
         generated_img = None
-        feature_maps_upsample = None
         feature_maps = None
-        noise = torch.randn((w.shape[0], 1, 1, 1), dtype=torch.float32).to(w.device)
         for i, block in enumerate(self.progression):
-            if i == 0:
-                feature_maps = block(w, w, noise) # TODO solve the issue where thi needs an input
-            else:
-                feature_maps_upsample = nn.functional.interpolate(feature_maps, scale_factor=2, mode='bilinear', align_corners=False)
-                feature_maps = block(feature_maps_upsample, w, noise)
+            # Separate noise for each block
+            noise = torch.randn((w.shape[0], 1, 1, 1), dtype=torch.float32).to(w.device)
+
+            prev_feature_maps = feature_maps
+            feature_maps = block(feature_maps, w, noise)
 
             if i == final_resolution_idx:
                 generated_img = self.to_rgb[i](feature_maps)
 
                 # If there is an already stabilized last previous resolution layer. alpha blend with it
                 if i > 0 and alpha < 1:
-                    generated_img_without_last_block = self.to_rgb[i - 1](feature_maps_upsample)
+                    generated_img_without_last_block = upscale_2d(self.to_rgb[i - 1](prev_feature_maps))
+
                     generated_img = alpha * generated_img + (1 - alpha) * generated_img_without_last_block
                 break
 
         return generated_img
 
 
+class PGGanDescriminatorBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, k1, p1, k2, p2, downsample=True):
+        super(PGGanDescriminatorBlock, self).__init__()
+        self.downsample = downsample
+        self.conv1 = Lreq_Conv2d(in_channels, out_channels, k1, p1)
+        self.lrelu = nn.LeakyReLU(0.2)
+        if downsample:
+            self.conv2 = torch.nn.Sequential(LearnablePreScaleBlur(out_channels),
+                                             Lreq_Conv2d(out_channels, out_channels, k2, p2),
+                                             torch.nn.AvgPool2d(2, 2))
+        else:
+            self.conv2 = Lreq_Conv2d(out_channels, out_channels, k2, p2)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.lrelu(x)
+
+        x = self.conv2(x)
+        x = self.lrelu(x)
+
+        return x
+
 class PGGanDiscriminator(nn.Module):
     def __init__(self):
-        self.resolutions = [4,8,16,32,64]
+        # self.resolutions = [4,8,16,32,64]
         super().__init__()
         # Waiting to adjust the size
         self.from_rgbs = nn.ModuleList([
@@ -170,17 +202,16 @@ class PGGanDiscriminator(nn.Module):
             Lreq_Conv2d(3, 32, 1, 0),
             Lreq_Conv2d(3, 16, 1, 0) # 64x64 imgs
         ])
-        self.convs  = nn.ModuleList([
-            nn.Sequential(Lreq_Conv2d(16, 32, 3, 1), nn.LeakyReLU(0.2), Lreq_Conv2d(32, 32, 3, 1), nn.LeakyReLU(0.2)), # 64x64 images start from here
-            nn.Sequential(Lreq_Conv2d(32, 64, 3, 1), nn.LeakyReLU(0.2), Lreq_Conv2d(64, 64, 3, 1), nn.LeakyReLU(0.2)), # 32x32 images start from here
-            nn.Sequential(Lreq_Conv2d(64, 128, 3, 1), nn.LeakyReLU(0.2), Lreq_Conv2d(128, 128, 3, 1), nn.LeakyReLU(0.2)), # 16x16 images start from here
-            nn.Sequential(Lreq_Conv2d(128, 256, 3, 1), nn.LeakyReLU(0.2), Lreq_Conv2d(256, 256, 3, 1), nn.LeakyReLU(0.2)), # 8x8 images start from here
-            nn.Sequential(Lreq_Conv2d(256 + 1, 512, 3, 1), nn.LeakyReLU(0.2), Lreq_Conv2d(512, 512, 4, 0), nn.LeakyReLU(0.2)), # 4x4 images start from here
+        self.convs = nn.ModuleList([
+            PGGanDescriminatorBlock(16, 32, k1=3, p1=1, k2=3, p2=1),
+            PGGanDescriminatorBlock(32, 64, k1=3, p1=1, k2=3, p2=1),
+            PGGanDescriminatorBlock(64, 128, k1=3, p1=1, k2=3, p2=1),
+            PGGanDescriminatorBlock(128, 256, k1=3, p1=1, k2=3, p2=1),
+            PGGanDescriminatorBlock(256 + 1, 512, k1=3, p1=1, k2=4, p2=0, downsample=False)
         ])
         assert(len(self.convs) == len(self.from_rgbs))
         self.fc = LREQ_FC_Layer(512, 1)
         self.n_layers = len(self.convs)
-
 
     def forward(self, image, final_resolution_idx, alpha=1):
         feature_maps = self.from_rgbs[final_resolution_idx](image)
@@ -197,19 +228,12 @@ class PGGanDiscriminator(nn.Module):
             # Conv
             feature_maps = self.convs[i](feature_maps)
 
-            # Not the final layer
-            if i != self.n_layers - 1:
-                # Downsample for further usage
-                feature_maps = nn.functional.interpolate(feature_maps, scale_factor=0.5, mode='bilinear',
-                                                                     align_corners=False)
-
-                # If there is an already stabilized previous scale layers (not last layer):
-                # Alpha blend the output of the unstable new layer with the downscaled putput of the previous one
-                if i == first_layer_idx and alpha < 1:
-                    down_sampled_image = nn.functional.interpolate(image, scale_factor=0.5, mode='bilinear',
-                                                                   align_corners=False)
-                    feature_maps = alpha * feature_maps + (1 - alpha) * self.from_rgbs[final_resolution_idx - 1](
-                        down_sampled_image)
+            # If there is an already stabilized previous scale layers (not last layer):
+            # Alpha blend the output of the unstable new layer with the downscaled putput of the previous one
+            if i == first_layer_idx and i != self.n_layers - 1 and alpha < 1:
+                down_sampled_image = downscale_2d(image)
+                feature_maps = alpha * feature_maps + (1 - alpha) * self.from_rgbs[final_resolution_idx - 1](
+                    down_sampled_image)
 
         # Convert it into [batch, channel(512)], so the fully-connetced layer
         # could process it.

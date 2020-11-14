@@ -16,6 +16,9 @@ N_CRITIC=1
 
 
 class EndlessDataloader:
+    """
+    An iterator wrapper for a dataloader that resets when reaches its end
+    """
     def __init__(self, dataloader):
         self.dataloader = dataloader
         self.iterator = iter(dataloader)
@@ -29,6 +32,7 @@ class EndlessDataloader:
             real_image = next(self.iterator)
 
         return real_image
+
 
 class StyleGan:
     def __init__(self, z_dim, w_dim, image_dim, hyper_parameters, device):
@@ -71,12 +75,12 @@ class StyleGan:
     def train(self, train_dataset, test_data, output_dir):
         tracker = LossTracker(output_dir)
         global_steps = 0
-        progress_bar = tqdm(enumerate(RESOLUTIONS))
-        for res_idx, res in progress_bar:
+        for res_idx, res in enumerate(RESOLUTIONS):
             # TODO adjust optimizers learning rate
             batchs_in_phase = TRAIN_PHASE_LENGTH // BATCH_SIZES[res_idx]
             dataloader = EndlessDataloader(get_dataloader(train_dataset, BATCH_SIZES[res_idx], resize=res, device=self.device))
-            for i in range(batchs_in_phase * 2) :
+            progress_bar = tqdm(range(batchs_in_phase * 2))
+            for i in  progress_bar:
                 alpha = min(1.0, i / batchs_in_phase)  # < 1 in the first half and 1 in the second
                 progress_bar.set_description(f"gs-{global_steps}_res-{res}x{res}_alpha-{alpha:.3f}")
                 batch_real_data = dataloader.next()
