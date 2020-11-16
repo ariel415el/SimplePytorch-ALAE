@@ -37,27 +37,27 @@ class LearnablePreScaleBlur(nn.Module):
 
 
 def pixel_norm(x, epsilon=1e-8):
-    # return x / torch.rsqrt(torch.mean(x.pow(2.0), dim=1, keepdim=True) + epsilon)
-    return x * torch.rsqrt(torch.mean(x.pow(2.0), dim=1, keepdim=True) + epsilon)
+    return x / torch.rsqrt(torch.mean(x.pow(2.0), dim=1, keepdim=True) + epsilon)
+    # return x * torch.rsqrt(torch.mean(x.pow(2.0), dim=1, keepdim=True) + epsilon)
 
 
 class StyleAffineTransform(nn.Module):
     '''
-    Learned affine transform A, this module is used to transform
-    midiate vector w into a style vector (treated as multiplicator and bias in Adain)
-    'A' unit in StyleGan
+    The 'A' unit in StyleGan:
+    Learned affine transform A, this module is used to transform the midiate vector w into a style vector
+    it outputs a mean and std for each channel for a given number of channels.
+    tis mean and std are used in AdaIn as facror and bias to chift the norm of the input
     It have n_channel
 
     '''
     def __init__(self, dim_latent, n_channel):
         super().__init__()
         self.transform = LREQ_FC_Layer(dim_latent, n_channel * 2)
-        # "the biases associated with ys that we initialize to one"
+        # "the biases associated with mean that we initialize to one"
         self.transform.bias.data[:n_channel] = 1
         self.transform.bias.data[n_channel:] = 0
 
     def forward(self, w):
-        # Gain scale factor and bias with:
         style = self.transform(w).unsqueeze(2).unsqueeze(3)
         return style
 
@@ -78,25 +78,10 @@ class NoiseScaler(nn.Module):
         return result
 
 
-class ConstantInput(nn.Module):
-    """
-    A simple constant parameter with a Module functionality
-    """
-    def __init__(self, out_channels, size=4):
-        super().__init__()
-        self.out_channels = out_channels
-        self.const = nn.Parameter(torch.randn(1, out_channels, size, size))
-
-    def forward(self, input):
-        out = self.const.repeat(input.shape[0], 1, 1, 1)
-
-        return out
-
-
 class AdaIn(nn.Module):
     '''
     adaptive instance normalization
-    Shifted the mean and variance of an input image by a given factor and bias
+    Shift the mean and variance of an input image by a given factor and bias
     '''
 
     def __init__(self, n_channel):
@@ -104,10 +89,10 @@ class AdaIn(nn.Module):
         self.norm = nn.InstanceNorm2d(n_channel)
 
     def forward(self, image, style):
-        factor, bias = style.chunk(2, 1)
-        result = self.norm(image)
-        result = result * factor + bias
-        return result
+        factor, bias = style.chunk(2, 1) # split number of chenels to two
+        normed_input = self.norm(image)
+        rescaled_image = normed_input * factor + bias
+        return rescaled_image
 
 
 class LREQ_FC_Layer_2(nn.Module):

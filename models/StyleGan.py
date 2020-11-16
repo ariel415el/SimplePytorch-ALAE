@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 RESOLUTIONS = [4, 8, 16, 32, 64]
 LEARNING_RATES = [0.001, 0.001, 0.001, 0.001, 0.001, ]
-TRAIN_PHASE_LENGTH = 128 * 1
+PHASE_LENGTHS = [400_000, 600_000, 800_000, 1_000_000, 2_000_000]
 BATCH_SIZES = [128, 128, 128, 128, 128]
 N_CRITIC=1
 
@@ -77,7 +77,7 @@ class StyleGan:
         global_steps = 0
         for res_idx, res in enumerate(RESOLUTIONS):
             # TODO adjust optimizers learning rate
-            batchs_in_phase = TRAIN_PHASE_LENGTH // BATCH_SIZES[res_idx]
+            batchs_in_phase = PHASE_LENGTHS[res_idx] // BATCH_SIZES[res_idx]
             dataloader = EndlessDataloader(get_dataloader(train_dataset, BATCH_SIZES[res_idx], resize=res, device=self.device))
             progress_bar = tqdm(range(batchs_in_phase * 2))
             for i in  progress_bar:

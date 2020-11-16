@@ -190,11 +190,11 @@ class PGGanDescriminatorBlock(nn.Module):
 
         return x
 
+
 class PGGanDiscriminator(nn.Module):
     def __init__(self):
         # self.resolutions = [4,8,16,32,64]
         super().__init__()
-        # Waiting to adjust the size
         self.from_rgbs = nn.ModuleList([
             Lreq_Conv2d(3, 256, 1, 0),  # 4x4 imgs
             Lreq_Conv2d(3, 128, 1, 0),
@@ -215,7 +215,7 @@ class PGGanDiscriminator(nn.Module):
 
     def forward(self, image, final_resolution_idx, alpha=1):
         feature_maps = self.from_rgbs[final_resolution_idx](image)
-        # If there is an already stabilized previous scale layers: Alpha Fade in new discriminator layers
+
         first_layer_idx = self.n_layers - final_resolution_idx - 1
         for i in range(first_layer_idx, self.n_layers):
             # Before final layer, do minibatch stddev:  adds a constant std channel
@@ -225,15 +225,14 @@ class PGGanDiscriminator(nn.Module):
                 mean_std = res_std.mean().expand(feature_maps.size(0), 1, 4, 4)
                 feature_maps = torch.cat([feature_maps, mean_std], 1)
 
-            # Conv
             feature_maps = self.convs[i](feature_maps)
 
-            # If there is an already stabilized previous scale layers (not last layer):
-            # Alpha blend the output of the unstable new layer with the downscaled putput of the previous one
+            # If this is the first conv block to be run and this is not the last one the there is an already stabilized
+            # previous scale layers : Alpha blend the output of the unstable new layer with the downscaled putput
+            # of the previous one
             if i == first_layer_idx and i != self.n_layers - 1 and alpha < 1:
-                down_sampled_image = downscale_2d(image)
-                feature_maps = alpha * feature_maps + (1 - alpha) * self.from_rgbs[final_resolution_idx - 1](
-                    down_sampled_image)
+                skip_first_block_feature_maps =  self.from_rgbs[final_resolution_idx - 1](downscale_2d(image))
+                feature_maps = alpha * feature_maps + (1 - alpha) * skip_first_block_feature_maps
 
         # Convert it into [batch, channel(512)], so the fully-connetced layer
         # could process it.
