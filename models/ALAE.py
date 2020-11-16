@@ -128,13 +128,15 @@ class ALAE:
 class StyleALAE(ALAE):
     def __init__(self, z_dim, w_dim, image_dim, hyper_parameters, device):
         super().__init__( z_dim, w_dim, image_dim, 'cnn', hyper_parameters, device)
+        self.res_idx = 0
         self.hp.update({
             "resolutions": [4, 8, 16, 32, 64],
             "learning_rates": [0.001, 0.001, 0.001, 0.001, 0.001],
             "phase_lengths": [400_000, 600_000, 800_000, 1_000_000, 2_000_000],
             "batch_sizes": [128, 128, 128, 128, 128],
             "n_critic": 1,
-            "dump_imgs_freq" : 1000
+            "dump_imgs_freq" : 1000,
+            "checkpoint_freq": 10000
                    })
         self.hp.update(hyper_parameters)
 
@@ -168,25 +170,58 @@ class StyleALAE(ALAE):
     def train(self, train_dataset, test_data, output_dir):
         tracker = LossTracker(output_dir)
         global_steps = 0
-        for res_idx, res in enumerate(self.hp['resolutions']):
-            self.set_optimizers_lr(self.hp['learning_rates'][res_idx])
-            batch_size = self.hp['batch_sizes'][res_idx]
-            batchs_in_phase = self.hp['phase_lengths'][res_idx] // batch_size
+        while self.res_idx < len(self.hp['resolutions']):
+            res = self.hp['resolutions'][self.res_idx]
+            self.set_optimizers_lr(self.hp['learning_rates'][self.res_idx])
+            batch_size = self.hp['batch_sizes'][self.res_idx]
+            batchs_in_phase = self.hp['phase_lengths'][self.res_idx] // batch_size
             dataloader = EndlessDataloader(get_dataloader(train_dataset, batch_size, resize=res, device=self.device))
             progress_bar = tqdm(range(batchs_in_phase * 2))
             for i in progress_bar:
                 # first half of the batchs are fade in phase where alpha < 1. in the second half alpha =1
                 alpha = min(1.0, i / batchs_in_phase)
-                progress_bar.set_description(f"gs-{global_steps}_res-{res}x{res}_alpha-{alpha:.3f}")
                 batch_real_data = dataloader.next()
+                self.perform_train_step(batch_real_data, tracker, final_resolution_idx=self.res_idx, alpha=alpha)
 
-                self.perform_train_step(batch_real_data, tracker, final_resolution_idx=res_idx, alpha=alpha)
+                progress_tag = f"gs-{global_steps}_res-{res}x{res}_alpha-{alpha:.2f}"
+                progress_bar.set_description(progress_tag)
 
+                global_steps += 1
                 if global_steps % self.hp['dump_imgs_freq'] == 0:
                     tracker.register_means(global_steps)
                     tracker.plot()
-                    dump_path = os.path.join(output_dir, f"gs-{global_steps}_res-{res}x{res}_alpha-{alpha}.jpg")
-                    self.save_sample(dump_path, test_data[0], test_data[1], final_resolution_idx=res_idx, alpha=alpha)
+                    dump_path = os.path.join(output_dir, f"{progress_tag}.jpg")
+                    self.save_sample(dump_path, test_data[0], test_data[1], final_resolution_idx=self.res_idx, alpha=alpha)
+
+                if global_steps % self.hp['checkpoint_freq'] == 0:
+                    self.save_train_state(os.path.join(output_dir, f"ckpt_{progress_tag}.pt"))
+            self.save_train_state(os.path.join(output_dir, f"ckpt_final.pt"))
+            self.res_idx += 1
+
+    def load_train_state(self, checkpoint_path):
+        checkpoint = torch.load(checkpoint_path)
+        self.F.load_state_dict(checkpoint['F'])
+        self.G.load_state_dict(checkpoint['G'])
+        self.E.load_state_dict(checkpoint['E'])
+        self.D.load_state_dict(checkpoint['D'])
+        self.ED_optimizer.load_state_dict(checkpoint['ED_optimizer'])
+        self.FG_optimizer.load_state_dict(checkpoint['FG_optimizer'])
+        self.res_idx = checkpoint['final_completed_res_idx']
+        print('Start training from loaded model...')
+
+    def save_train_state(self, save_path):
+        torch.save(
+            {
+                'F': self.F.state_dict(),
+                'G': self.G.state_dict(),
+                'E': self.E.state_dict(),
+                'D': self.D.state_dict(),
+                'ED_optimizer': self.ED_optimizer.state_dict(),
+                'FG_optimizer': self.FG_optimizer.state_dict(),
+                "final_completed_res_idx": self.res_idx
+            },
+            save_path
+        )
 
 
 class FC_ALAE(ALAE):
