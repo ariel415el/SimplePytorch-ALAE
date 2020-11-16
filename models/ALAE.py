@@ -112,6 +112,7 @@ class ALAE:
         raise NotImplementedError
 
     def save_sample(self, dump_path, samples_z, samples, **ae_kwargs):
+        os.makedirs(os.path.dirname(dump_path), exist_ok=True)
         with torch.no_grad():
             restored_image = self.decode(self.encode(samples, **ae_kwargs), **ae_kwargs)
             generated_images = self.generate(samples_z, **ae_kwargs)
@@ -190,7 +191,7 @@ class StyleALAE(ALAE):
                 if global_steps % self.hp['dump_imgs_freq'] == 0:
                     tracker.register_means(global_steps)
                     tracker.plot()
-                    dump_path = os.path.join(output_dir,'images' f"{progress_tag}.jpg")
+                    dump_path = os.path.join(output_dir, 'images', f"{progress_tag}.jpg")
                     self.save_sample(dump_path, test_data[0], test_data[1], final_resolution_idx=self.res_idx, alpha=alpha)
 
                 if global_steps % self.hp['checkpoint_freq'] == 0:
