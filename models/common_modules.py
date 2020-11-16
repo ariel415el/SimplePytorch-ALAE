@@ -301,7 +301,7 @@ class AlaeEncoder(nn.Module):
         self.n_layers = len(self.convs)
 
     def forward(self, image, final_resolution_idx, alpha=1):
-        latent_vector = torch.zeros(image.shape[0], self.latent_size)
+        latent_vector = torch.zeros(image.shape[0], self.latent_size).to(image.device)
 
         feature_maps = self.from_rgbs[final_resolution_idx](image)
 

@@ -28,7 +28,6 @@ class ALAE:
         self.FG_optimizer = LREQAdam(list(self.F.parameters()) + list(self.G.parameters()), lr=self.hp['lr'], betas=(0.0, 0.99), weight_decay=0)
         # self.EG_optimizer = LREQAdam(list(self.E.parameters()) + list(self.G.parameters()), lr=self.hp['lr'], betas=(0.0, 0.99), weight_decay=0)
 
-
     def get_ED_loss(self, batch_real_data, **ae_kwargs):
         """
         Computes a standard adverserial loss for the dictriminator D(E( * )):
@@ -112,13 +111,10 @@ class ALAE:
     def decode(self, latent_vectorsz, **ae_kwargs):
         raise NotImplementedError
 
-    def save_sample(self, epoch, tracker, samples_z, samples, output_dir, **ae_kwargs):
+    def save_sample(self, dump_path, samples_z, samples, **ae_kwargs):
         with torch.no_grad():
             restored_image = self.decode(self.encode(samples, **ae_kwargs), **ae_kwargs)
             generated_images = self.generate(samples_z, **ae_kwargs)
-
-            # tracker.update(dict(gen_min_val=0.5 * (restored_image.min() + generated_images.min()),
-            #                     gen_max_val=0.5 * (restored_image.max() + generated_images.max())))
 
             resultsample = torch.cat([samples, restored_image, generated_images], dim=0).cpu()
 
@@ -127,10 +123,7 @@ class ALAE:
             # raining continues or else the discriminator can detect them. Anyway save_image clamps it to 0,1
             resultsample = resultsample * 0.5 + 0.5
 
-            tracker.register_means(epoch)
-            tracker.plot()
-            f = os.path.join(output_dir, 'sample_%d.jpg' % (epoch))
-            save_image(resultsample, f, nrow=len(samples))
+            save_image(resultsample, dump_path, nrow=len(samples))
 
 class StyleALAE(ALAE):
     def __init__(self, z_dim, w_dim, image_dim, hyper_parameters, device):
@@ -144,6 +137,11 @@ class StyleALAE(ALAE):
             "dump_imgs_freq" : 1000
                    })
         self.hp.update(hyper_parameters)
+
+    def set_optimizers_lr(self, new_lr):
+        for optimizer in [self.ED_optimizer, self.FG_optimizer]:
+            for group in optimizer.param_groups:
+                group['lr'] = new_lr
 
     def generate(self, z_vectors, **ae_kwargs):
         self.G.eval()
@@ -171,27 +169,30 @@ class StyleALAE(ALAE):
         tracker = LossTracker(output_dir)
         global_steps = 0
         for res_idx, res in enumerate(self.hp['resolutions']):
-            # TODO adjust optimizers learning rate
+            self.set_optimizers_lr(self.hp['learning_rates'][res_idx])
             batch_size = self.hp['batch_sizes'][res_idx]
             batchs_in_phase = self.hp['phase_lengths'][res_idx] // batch_size
-            dataloader = EndlessDataloader(
-                get_dataloader(train_dataset, batch_size, resize=res, device=self.device))
+            dataloader = EndlessDataloader(get_dataloader(train_dataset, batch_size, resize=res, device=self.device))
             progress_bar = tqdm(range(batchs_in_phase * 2))
             for i in progress_bar:
-                alpha = min(1.0, i / batchs_in_phase)  # < 1 in the first half and 1 in the second
+                # first half of the batchs are fade in phase where alpha < 1. in the second half alpha =1
+                alpha = min(1.0, i / batchs_in_phase)
                 progress_bar.set_description(f"gs-{global_steps}_res-{res}x{res}_alpha-{alpha:.3f}")
                 batch_real_data = dataloader.next()
 
                 self.perform_train_step(batch_real_data, tracker, final_resolution_idx=res_idx, alpha=alpha)
 
                 if global_steps % self.hp['dump_imgs_freq'] == 0:
-                    self.save_sample(global_steps, tracker, test_data[0], test_data[1], output_dir, final_resolution_idx=res_idx, alpha=alpha)
+                    tracker.register_means(global_steps)
+                    tracker.plot()
+                    dump_path = os.path.join(output_dir, f"gs-{global_steps}_res-{res}x{res}_alpha-{alpha}.jpg")
+                    self.save_sample(dump_path, test_data[0], test_data[1], final_resolution_idx=res_idx, alpha=alpha)
 
 
 class FC_ALAE(ALAE):
     def __init__(self, z_dim, w_dim, image_dim, hyper_parameters, device):
         super().__init__( z_dim, w_dim, image_dim, 'FC', hyper_parameters, device)
-        self.hp.update({"batch_size": 128, "epochs":100})
+        self.hp.update({"batch_size": 128, "epochs":100, 'mapping_layers':8})
         self.hp.update(hyper_parameters)
 
     def generate(self, z_vectors, **ae_kwargs):
@@ -210,4 +211,8 @@ class FC_ALAE(ALAE):
             for batch_real_data in tqdm(train_dataloader):
                 self.perform_train_step(batch_real_data, tracker)
 
-            self.save_sample(epoch, tracker, test_data[0], test_data[1], output_dir)
+            tracker.register_means(epoch)
+            tracker.plot()
+            dump_path = os.path.join(output_dir, f"epoch-{epoch}.jpg")
+            self.save_sample(tracker, test_data[0], test_data[1])
+
