@@ -190,26 +190,29 @@ class StyleALAE(ALAE):
                 if global_steps % self.hp['dump_imgs_freq'] == 0:
                     tracker.register_means(global_steps)
                     tracker.plot()
-                    dump_path = os.path.join(output_dir, f"{progress_tag}.jpg")
+                    dump_path = os.path.join(output_dir,'images' f"{progress_tag}.jpg")
                     self.save_sample(dump_path, test_data[0], test_data[1], final_resolution_idx=self.res_idx, alpha=alpha)
 
                 if global_steps % self.hp['checkpoint_freq'] == 0:
-                    self.save_train_state(os.path.join(output_dir, f"ckpt_{progress_tag}.pt"))
-            self.save_train_state(os.path.join(output_dir, f"ckpt_final.pt"))
+                    self.save_train_state(os.path.join(output_dir, 'checkpoints', f"ckpt_{progress_tag}.pt"))
+            self.save_train_state(os.path.join(output_dir, 'checkpoints', f"ckpt_final.pt"))
             self.res_idx += 1
 
     def load_train_state(self, checkpoint_path):
-        checkpoint = torch.load(checkpoint_path)
-        self.F.load_state_dict(checkpoint['F'])
-        self.G.load_state_dict(checkpoint['G'])
-        self.E.load_state_dict(checkpoint['E'])
-        self.D.load_state_dict(checkpoint['D'])
-        self.ED_optimizer.load_state_dict(checkpoint['ED_optimizer'])
-        self.FG_optimizer.load_state_dict(checkpoint['FG_optimizer'])
-        self.res_idx = checkpoint['final_completed_res_idx']
-        print('Start training from loaded model...')
-
+        if os.path.exists(checkpoint_path):
+            checkpoint = torch.load(checkpoint_path)
+            self.F.load_state_dict(checkpoint['F'])
+            self.G.load_state_dict(checkpoint['G'])
+            self.E.load_state_dict(checkpoint['E'])
+            self.D.load_state_dict(checkpoint['D'])
+            self.ED_optimizer.load_state_dict(checkpoint['ED_optimizer'])
+            self.FG_optimizer.load_state_dict(checkpoint['FG_optimizer'])
+            self.res_idx = checkpoint['final_completed_res_idx']
+            print(f"Checpoint found and loaded. Starting from reolution {4**(1+self.res_idx)}")
+        else:
+            print("Starting training from scratch ")
     def save_train_state(self, save_path):
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
         torch.save(
             {
                 'F': self.F.state_dict(),

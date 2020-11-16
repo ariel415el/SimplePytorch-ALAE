@@ -1,10 +1,16 @@
 from datasets import get_dataset, get_dataloader
 from models.StyleGan import StyleGan
 from models.ALAE import *
+from pathlib import Path
 
 OUTPUT_DIR = 'Training_dir-test'
 NUMED_BUG_IMAGES=36
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
+def find_latest_checkpoint(ckpt_dir):
+    oldest_to_newest_paths = sorted(Path(ckpt_dir).iterdir(), key=os.path.getmtime)
+    return [x._str for x in oldest_to_newest_paths if x._str.endswith("pt")][0]
 
 
 def train_ALAE_mnist(output_dir):
@@ -52,6 +58,7 @@ def train_ALAE_lfw(output_dir):
                    }
     # Create model
     model = StyleALAE(z_dim=LATENT_SPACE_SIZE, w_dim=LATENT_SPACE_SIZE, image_dim=img_dim, hyper_parameters=hp,device=device)
+    model.load_train_state(find_latest_checkpoint(os.path.join(output_dir, 'checkpoints')))
 
     test_dataloader = get_dataloader(test_dataset, batch_size=NUMED_BUG_IMAGES, resize=None, device=device)
     test_samples_z = torch.randn(NUMED_BUG_IMAGES, LATENT_SPACE_SIZE, dtype=torch.float32).to(device)
