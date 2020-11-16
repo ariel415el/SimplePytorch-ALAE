@@ -1,5 +1,6 @@
 from utils.costume_layers import *
 
+MIN_LAYER_DIM = 4
 
 class MappingFromLatent(nn.Module):
     def __init__(self, num_layers=5, input_dim=256, out_dim=256):
@@ -34,17 +35,17 @@ class DiscriminatorFC(nn.Module):
 
 
 class EncoderFC(nn.Module):
-    def __init__(self, input_dim, out_dim):
+    def __init__(self, input_img_dim, latent_dim):
         super(EncoderFC, self).__init__()
-        self.out_dim = out_dim
-        self.input_dim = input_dim
+        self.out_dim = latent_dim
+        self.input_img_dim = input_img_dim
 
-        self.fc_1 = LREQ_FC_Layer(input_dim ** 2, 1024)
+        self.fc_1 = LREQ_FC_Layer(input_img_dim ** 2, 1024)
         self.fc_2 = LREQ_FC_Layer(1024, 1024)
-        self.fc_3 = LREQ_FC_Layer(1024, out_dim)
+        self.fc_3 = LREQ_FC_Layer(1024, latent_dim)
 
     def encode(self, x):
-        x = x.view(x.shape[0], self.input_dim**2)
+        x = x.view(x.shape[0], self.input_img_dim**2)
 
         x = self.fc_1(x)
         x = F.leaky_relu(x, 0.2)
@@ -60,14 +61,14 @@ class EncoderFC(nn.Module):
 
 
 class GeneratorFC(nn.Module):
-    def __init__(self, input_dim, output_dim):
+    def __init__(self, latent_dim, output_img_dim):
         super(GeneratorFC, self).__init__()
-        self.latent_size = input_dim
-        self.output_dim = output_dim
+        self.latent_size = latent_dim
+        self.output_img_dim = output_img_dim
 
-        self.fc_1 = LREQ_FC_Layer(input_dim, 1024)
+        self.fc_1 = LREQ_FC_Layer(latent_dim, 1024)
         self.fc_2 = LREQ_FC_Layer(1024, 1024)
-        self.fc_3 = LREQ_FC_Layer(1024, self.output_dim ** 2)
+        self.fc_3 = LREQ_FC_Layer(1024, self.output_img_dim ** 2)
 
     def forward(self, x):
         x = self.fc_1(x)
@@ -76,7 +77,7 @@ class GeneratorFC(nn.Module):
         x = F.leaky_relu(x, 0.2)
         x = self.fc_3(x)
 
-        x = x.view(x.shape[0], 1, self.output_dim, self.output_dim)
+        x = x.view(x.shape[0], 1, self.output_img_dim, self.output_img_dim)
 
         return x
 
@@ -87,7 +88,7 @@ class StyleGeneratorBlock(nn.Module):
         self.is_first_block = is_first_block
 
         if is_first_block:
-            self.const_input = nn.Parameter(torch.randn(1, out_channels, 4, 4))
+            self.const_input = nn.Parameter(torch.randn(1, out_channels, MIN_LAYER_DIM, MIN_LAYER_DIM))
         else:
             self.blur = LearnablePreScaleBlur(out_channels)
             self.conv1 = Lreq_Conv2d(in_channels, out_channels, 3, padding=1)
@@ -122,8 +123,8 @@ class StyleGeneratorBlock(nn.Module):
 
 
 class StylleGanGenerator(nn.Module):
-    def __init__(self, latent_dim, out_dim=64):
-        assert out_dim == 64
+    def __init__(self, latent_dim, output_img_dim=64):
+        assert output_img_dim == 64
         super(StylleGanGenerator, self).__init__()
         self.latent_dim = latent_dim
         self.progression = nn.ModuleList(
@@ -169,17 +170,17 @@ class StylleGanGenerator(nn.Module):
 
 
 class PGGanDescriminatorBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, k1, p1, k2, p2, downsample=True):
+    def __init__(self, in_channels, out_channels, downsample=True):
         super(PGGanDescriminatorBlock, self).__init__()
         self.downsample = downsample
-        self.conv1 = Lreq_Conv2d(in_channels, out_channels, k1, p1)
+        self.conv1 = Lreq_Conv2d(in_channels, out_channels, 3, 1)
         self.lrelu = nn.LeakyReLU(0.2)
         if downsample:
             self.conv2 = torch.nn.Sequential(LearnablePreScaleBlur(out_channels),
-                                             Lreq_Conv2d(out_channels, out_channels, k2, p2),
+                                             Lreq_Conv2d(out_channels, out_channels, 3, 1),
                                              torch.nn.AvgPool2d(2, 2))
         else:
-            self.conv2 = Lreq_Conv2d(out_channels, out_channels, k2, p2)
+            self.conv2 = Lreq_Conv2d(out_channels, out_channels, MIN_LAYER_DIM, 0)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -203,11 +204,11 @@ class PGGanDiscriminator(nn.Module):
             Lreq_Conv2d(3, 16, 1, 0) # 64x64 imgs
         ])
         self.convs = nn.ModuleList([
-            PGGanDescriminatorBlock(16, 32, k1=3, p1=1, k2=3, p2=1),
-            PGGanDescriminatorBlock(32, 64, k1=3, p1=1, k2=3, p2=1),
-            PGGanDescriminatorBlock(64, 128, k1=3, p1=1, k2=3, p2=1),
-            PGGanDescriminatorBlock(128, 256, k1=3, p1=1, k2=3, p2=1),
-            PGGanDescriminatorBlock(256 + 1, 512, k1=3, p1=1, k2=4, p2=0, downsample=False)
+            PGGanDescriminatorBlock(16, 32),
+            PGGanDescriminatorBlock(32, 64),
+            PGGanDescriminatorBlock(64, 128),
+            PGGanDescriminatorBlock(128, 256),
+            PGGanDescriminatorBlock(256 + 1, 512, downsample=False)
         ])
         assert(len(self.convs) == len(self.from_rgbs))
         self.fc = LREQ_FC_Layer(512, 1)
@@ -222,7 +223,7 @@ class PGGanDiscriminator(nn.Module):
             if i == self.n_layers - 1:
                 res_var = feature_maps.var(0, unbiased=False) + 1e-8 # Avoid zero
                 res_std = torch.sqrt(res_var)
-                mean_std = res_std.mean().expand(feature_maps.size(0), 1, 4, 4)
+                mean_std = res_std.mean().expand(feature_maps.size(0), 1, MIN_LAYER_DIM, MIN_LAYER_DIM)
                 feature_maps = torch.cat([feature_maps, mean_std], 1)
 
             feature_maps = self.convs[i](feature_maps)
@@ -239,3 +240,82 @@ class PGGanDiscriminator(nn.Module):
         feature_maps = feature_maps.squeeze(2).squeeze(2)
         result = self.fc(feature_maps)
         return result
+
+
+class AlaeEncoderBlockBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, latent_dim, downsample=True):
+        super(AlaeEncoderBlockBlock, self).__init__()
+        self.downsample = downsample
+        self.conv1 = Lreq_Conv2d(in_channels, in_channels, 3, 1)
+        self.lrelu = nn.LeakyReLU(0.2)
+        self.instance_norm_1 = StyleInstanceNorm2d(in_channels)
+        self.c_1 = LREQ_FC_Layer(2 * in_channels, latent_dim)
+        if downsample:
+            self.conv2 = torch.nn.Sequential(LearnablePreScaleBlur(in_channels),
+                                             Lreq_Conv2d(in_channels, out_channels, 3, 1),
+                                             torch.nn.AvgPool2d(2, 2))
+            self.instance_norm_2 = StyleInstanceNorm2d(out_channels)
+            self.c_2 = LREQ_FC_Layer(2 * out_channels, latent_dim)
+        else: # Last layer
+            self.conv2 = Lreq_Conv2d(in_channels, out_channels, MIN_LAYER_DIM, 0)
+            self.c_2 = LREQ_FC_Layer(out_channels, latent_dim)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.lrelu(x)
+
+        x, style_1 = self.instance_norm_1(x)
+        w1 = self.c_1(style_1.squeeze(3).squeeze(2))
+
+        x = self.conv2(x)
+        x = self.lrelu(x)
+        if self.downsample:
+            x, style_2 = self.instance_norm_2(x)
+            w2 = self.c_2(style_2.squeeze(3).squeeze(2))
+        else: # last layer
+            w2 = self.c_2(x.squeeze(3).squeeze(2))
+
+
+        return x, w1, w2
+
+
+class AlaeEncoder(nn.Module):
+    def __init__(self, input_img_dim, latent_dim):
+        super().__init__()
+        self.latent_size = latent_dim
+        self.from_rgbs = nn.ModuleList([
+            Lreq_Conv2d(3, 256, 1, 0),  # 4x4 imgs
+            Lreq_Conv2d(3, 128, 1, 0),
+            Lreq_Conv2d(3, 64, 1, 0),
+            Lreq_Conv2d(3, 32, 1, 0),
+            Lreq_Conv2d(3, 16, 1, 0) # 64x64 imgs
+        ])
+        self.convs = nn.ModuleList([
+            AlaeEncoderBlockBlock(16, 32, latent_dim),
+            AlaeEncoderBlockBlock(32, 64, latent_dim),
+            AlaeEncoderBlockBlock(64, 128, latent_dim),
+            AlaeEncoderBlockBlock(128, 256, latent_dim),
+            AlaeEncoderBlockBlock(256, 512, latent_dim, downsample=False)
+        ])
+        assert(len(self.convs) == len(self.from_rgbs))
+        self.n_layers = len(self.convs)
+
+    def forward(self, image, final_resolution_idx, alpha=1):
+        latent_vector = torch.zeros(image.shape[0], self.latent_size)
+
+        feature_maps = self.from_rgbs[final_resolution_idx](image)
+
+        first_layer_idx = self.n_layers - final_resolution_idx - 1
+        for i in range(first_layer_idx, self.n_layers):
+            feature_maps, w1, w2 = self.convs[i](feature_maps)
+            latent_vector += w1 + w2
+
+            # If this is the first conv block to be run and this is not the last one the there is an already stabilized
+            # previous scale layers : Alpha blend the output of the unstable new layer with the downscaled putput
+            # of the previous one
+            if i == first_layer_idx and i != self.n_layers - 1 and alpha < 1:
+                skip_first_block_feature_maps =  self.from_rgbs[final_resolution_idx - 1](downscale_2d(image))
+                feature_maps = alpha * feature_maps + (1 - alpha) * skip_first_block_feature_maps
+
+        return latent_vector
+

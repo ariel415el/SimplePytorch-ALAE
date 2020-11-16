@@ -4,7 +4,7 @@ from utils.tracker import LossTracker
 from utils.loss_utils import compute_r1_gradient_penalty
 from torchvision.utils import save_image
 import os
-from datasets import get_dataloader
+from datasets import get_dataloader, EndlessDataloader
 from tqdm import tqdm
 
 
@@ -13,25 +13,6 @@ LEARNING_RATES = [0.001, 0.001, 0.001, 0.001, 0.001, ]
 PHASE_LENGTHS = [400_000, 600_000, 800_000, 1_000_000, 2_000_000]
 BATCH_SIZES = [128, 128, 128, 128, 128]
 N_CRITIC=1
-
-
-class EndlessDataloader:
-    """
-    An iterator wrapper for a dataloader that resets when reaches its end
-    """
-    def __init__(self, dataloader):
-        self.dataloader = dataloader
-        self.iterator = iter(dataloader)
-
-    def next(self):
-        try:
-            real_image = next(self.iterator)
-
-        except (OSError, StopIteration):
-            self.iterator = iter(self.dataloader)
-            real_image = next(self.iterator)
-
-        return real_image
 
 
 class StyleGan:
@@ -43,7 +24,7 @@ class StyleGan:
 
         self.F = MappingFromLatent(num_layers=8, input_dim=z_dim, out_dim=w_dim).to(device).train()
 
-        self.G = StylleGanGenerator(latent_dim=w_dim, out_dim=image_dim).to(device).train()
+        self.G = StylleGanGenerator(latent_dim=w_dim, output_img_dim=image_dim).to(device).train()
 
         self.D = PGGanDiscriminator().to(device).train()
 
@@ -54,8 +35,8 @@ class StyleGan:
         batch_z = torch.randn(batch_real_data.shape[0], self.z_dim, dtype=torch.float32).to(self.device)
         with torch.no_grad():
             batch_fake_data = self.G(self.F(batch_z), final_resolution_idx=res_idx, alpha=alpha)
-        fake_images_dicriminator_outputs = self.D(batch_fake_data, res_idx, alpha)
-        real_images_dicriminator_outputs = self.D(batch_real_data, res_idx, alpha)
+        fake_images_dicriminator_outputs = self.D(batch_fake_data, final_resolution_idx=res_idx, alpha=alpha)
+        real_images_dicriminator_outputs = self.D(batch_real_data, final_resolution_idx=res_idx, alpha=alpha)
         loss = F.softplus(fake_images_dicriminator_outputs) + F.softplus(-real_images_dicriminator_outputs)
         loss = loss.reshape(-1)
         r1_penalty = compute_r1_gradient_penalty(real_images_dicriminator_outputs, batch_real_data)

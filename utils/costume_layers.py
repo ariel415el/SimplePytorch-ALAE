@@ -15,6 +15,22 @@ def downscale_2d(x):
     return F.avg_pool2d(x, 2, 2)  # downscales in factor 2
 
 
+class StyleInstanceNorm2d(nn.Module):
+    def __init__(self, channels):
+        super(StyleInstanceNorm2d, self).__init__()
+        self.instance_norm = nn.InstanceNorm2d(channels, affine=False)
+
+    def forward(self, x):
+        # TODO: implement  nn.InstanceNorm2d here to save redundant mean/var computation
+        assert(len(x.shape) == 4)
+        m = torch.mean(x, dim=[2, 3], keepdim=True)
+        std = torch.sqrt(torch.mean((x - m) ** 2, dim=[2, 3], keepdim=True))
+        style = torch.cat((m, std), dim=1)
+
+        x = self.instance_norm(x)
+
+        return x, style
+
 class LearnablePreScaleBlur(nn.Module):
     """
     From StyleFan paper:
@@ -44,10 +60,9 @@ def pixel_norm(x, epsilon=1e-8):
 class StyleAffineTransform(nn.Module):
     '''
     The 'A' unit in StyleGan:
-    Learned affine transform A, this module is used to transform the midiate vector w into a style vector
-    it outputs a mean and std for each channel for a given number of channels.
-    tis mean and std are used in AdaIn as facror and bias to chift the norm of the input
-    It have n_channel
+    Learned affine transform A, this module is used to transform the midiate vector w into a style vector.
+    it outputs a mean and std scalar for each channel for a given number of channels.
+    this mean and std are used in AdaIn as facror and bias to shift the norm of the input channels
 
     '''
     def __init__(self, dim_latent, n_channel):
@@ -81,7 +96,7 @@ class NoiseScaler(nn.Module):
 class AdaIn(nn.Module):
     '''
     adaptive instance normalization
-    Shift the mean and variance of an input image by a given factor and bias
+    Shift the mean and variance of each chnnel in the input image by a given factor and bias
     '''
 
     def __init__(self, n_channel):

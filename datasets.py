@@ -130,6 +130,25 @@ class SimpleDataset(Dataset):
         return self.data_matrix
 
 
+class EndlessDataloader:
+    """
+    An iterator wrapper for a dataloader that resets when reaches its end
+    """
+    def __init__(self, dataloader):
+        self.dataloader = dataloader
+        self.iterator = iter(dataloader)
+
+    def next(self):
+        try:
+            real_image = next(self.iterator)
+
+        except (OSError, StopIteration):
+            self.iterator = iter(self.dataloader)
+            real_image = next(self.iterator)
+
+        return real_image
+
+
 def get_celeba(data_dir):
     # train_dataset = tv_datasets.CelebA(data_dir, split='all', download=True)
     # test_dataset = tv_datasets.MNIST(data_dir, train=False, download=True)
