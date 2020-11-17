@@ -52,10 +52,10 @@ def train_StyleALAE_on_faces(output_dir, dataset_name):
     train_dataset, test_dataset, img_dim = get_dataset("data", dataset_name)
     hp = {
             "resolutions": [4, 8, 16, 32, 64],
-            "learning_rates": [0.001, 0.001, 0.001, 0.001, 0.001],
-            # "phase_lengths": [400_000, 600_000, 800_000, 1_000_000, 2_000_000],
-            "phase_lengths": [128, 128, 128, 128, 128],
-            "batch_sizes": [128, 128, 128, 128, 128],
+            "learning_rates": [0.001, 0.0015, 0.002, 0.0025, 0.003],
+            "phase_lengths": [200_000, 400_000, 600_000, 800_000, 1000_000],
+            # "phase_lengths": [128, 128, 128, 128, 128],
+            "batch_sizes": [512, 512, 256, 256, 128],
             "n_critic": 1
                    }
     # Create model

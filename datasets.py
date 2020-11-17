@@ -21,11 +21,12 @@ VAL_SET_PORTION=0.05
 
 
 class ImgLoader:
-    def __init__(self, center_crop_size, resize, normalize, dtype):
+    def __init__(self, center_crop_size, resize, normalize, to_torch, dtype):
         self.center_crop_size = center_crop_size
         self.resize = resize
         self.normalize = normalize
         self.dtype = dtype
+        self.to_torch = to_torch
 
     def __call__(self, path):
         img = cv2.imread(path)
@@ -37,7 +38,10 @@ class ImgLoader:
         img = img.transpose(2, 0, 1)
         if self.normalize:
             img = img / 127.5 - 1
-        img = img.astype(self.dtype)
+        if self.to_torch:
+            img = torch.tensor(img, dtype=self.dtype)
+        else:
+            img = img.astype(self.dtype)
         return img
 
 
@@ -126,7 +130,7 @@ def get_lfw(data_dir):
     pt_name = f"LFW-{LFW_WORKING_DIM}x{LFW_WORKING_DIM}.pt"
     if not os.path.exists(os.path.join(data_dir, pt_name)):
         imgs = []
-        img_loader = ImgLoader(center_crop_size=150, resize=LFW_WORKING_DIM, normalize=True, dtype=np.float32)
+        img_loader = ImgLoader(center_crop_size=150, resize=LFW_WORKING_DIM, normalize=True, to_torch=False, dtype=np.float32)
         for celeb_name in os.listdir(os.path.join(data_dir, 'lfw-deepfunneled')):
             for fname in os.listdir(os.path.join(data_dir, 'lfw-deepfunneled', celeb_name)):
                 img = img_loader(os.path.join(data_dir, 'lfw-deepfunneled', celeb_name, fname))
@@ -156,23 +160,26 @@ def get_mnist(data_dir):
 
 
 def get_celeba(data_dir):
-    download_celeba(data_dir)
     imgs_dir = os.path.join(data_dir, 'img_align_celeba', 'img_align_celeba')
-    img_loader = ImgLoader(center_crop_size=170, resize=CELEB_A_WORKING_DIM, normalize=True, dtype=np.float32)
-    dataset = DiskDataset(os.listdir(imgs_dir), img_loader)
+    if not os.path.exists(imgs_dir):
+        download_celeba(data_dir)
+    img_loader = ImgLoader(center_crop_size=170, resize=CELEB_A_WORKING_DIM, normalize=True, to_torch=True, dtype=torch.float32)
+    img_paths = [os.path.join(imgs_dir, fname) for fname in os.listdir(imgs_dir)]
+    dataset = DiskDataset(img_paths, img_loader)
     val_size = int(len(dataset) * VAL_SET_PORTION)
     train_dataset, val_dataset = random_split(dataset, [len(dataset) - val_size, val_size], generator=torch.Generator().manual_seed(42))
 
     return train_dataset, val_dataset, CELEB_A_WORKING_DIM
 
-
 def get_ffhq(data_dir):
-    download_ffhq_thumbnails(data_dir)
     imgs_dir = os.path.join(data_dir, 'thumbnails128x128')
+    if not os.path.exists(imgs_dir):
+        download_ffhq_thumbnails(data_dir)
+
     pt_file = f"FFGQ_Thumbnail-{FFHQ_WORKING_DIM}x{FFHQ_WORKING_DIM}.pt"
     if not os.path.exists(os.path.join(data_dir, pt_file)):
         imgs = []
-        img_loader = ImgLoader(center_crop_size=None, resize=FFHQ_WORKING_DIM, normalize=True, dtype=np.float32)
+        img_loader = ImgLoader(center_crop_size=None, resize=FFHQ_WORKING_DIM, normalize=True, to_torch=False, dtype=np.float32)
         for img_name in tqdm(os.listdir(imgs_dir)):
             fname = os.path.join(imgs_dir, img_name)
             img = img_loader(fname)

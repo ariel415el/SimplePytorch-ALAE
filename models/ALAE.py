@@ -196,8 +196,9 @@ class StyleALAE(ALAE):
 
                 if global_steps % self.hp['checkpoint_freq'] == 0:
                     self.save_train_state(os.path.join(output_dir, 'checkpoints', f"ckpt_{progress_tag}.pt"))
-            self.save_train_state(os.path.join(output_dir, 'checkpoints', f"ckpt_final.pt"))
             self.res_idx += 1
+            self.save_train_state(os.path.join(output_dir, 'checkpoints', f"ckpt_phase{self.res_idx}-end.pt"))
+        self.save_train_state(os.path.join(output_dir, 'checkpoints', f"ckpt_final.pt"))
 
     def load_train_state(self, checkpoint_path):
         if os.path.exists(checkpoint_path):
@@ -209,7 +210,7 @@ class StyleALAE(ALAE):
             self.ED_optimizer.load_state_dict(checkpoint['ED_optimizer'])
             self.FG_optimizer.load_state_dict(checkpoint['FG_optimizer'])
             self.res_idx = checkpoint['final_completed_res_idx']
-            print(f"Checpoint found and loaded. Starting from reolution {4**(1+self.res_idx)}")
+            print(f"Checkpoint found and loaded. Starting from resolution {2**(2+self.res_idx)}")
         else:
             print("Starting training from scratch ")
     def save_train_state(self, save_path):
