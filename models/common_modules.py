@@ -108,8 +108,9 @@ class StyleGeneratorBlock(nn.Module):
             assert(input is None)
             result = self.const_input.repeat(latent_w.shape[0], 1, 1, 1)
         else:
-            result = upscale_2d(input)
-            result = self.conv1(result)
+            if self.upscale:
+                input = upscale_2d(input)
+            result = self.conv1(input)
             result = self.blur(result)
 
         result += self.noise_scaler_1(noise)
@@ -165,8 +166,9 @@ class StylleGanGenerator(nn.Module):
 
                 # If there is an already stabilized last previous resolution layer. alpha blend with it
                 if i > 0 and alpha < 1:
-                    generated_img_without_last_block = upscale_2d(self.to_rgb[i - 1](prev_feature_maps))
-
+                    generated_img_without_last_block = self.to_rgb[i - 1](prev_feature_maps)
+                    if block.upscale:
+                        generated_img_without_last_block = upscale_2d(generated_img_without_last_block)
                     generated_img = alpha * generated_img + (1 - alpha) * generated_img_without_last_block
                 break
 
@@ -267,7 +269,6 @@ class AlaeEncoderBlockBlock(nn.Module):
             self.instance_norm_2 = StyleInstanceNorm2d(out_channels)
             self.c_2 = LREQ_FC_Layer(2 * out_channels, latent_dim)
 
-
     def forward(self, x):
         x = self.conv1(x)
         x = self.lrelu(x)
@@ -277,12 +278,11 @@ class AlaeEncoderBlockBlock(nn.Module):
 
         x = self.conv2(x)
         x = self.lrelu(x)
-        if self.downsample:
+        if self.is_last_block:
+            w2 = self.c_2(x.squeeze(3).squeeze(2))
+        else:
             x, style_2 = self.instance_norm_2(x)
             w2 = self.c_2(style_2.squeeze(3).squeeze(2))
-        else: # last layer
-            w2 = self.c_2(x.squeeze(3).squeeze(2))
-
 
         return x, w1, w2
 
@@ -324,7 +324,9 @@ class AlaeEncoder(nn.Module):
             # previous scale layers : Alpha blend the output of the unstable new layer with the downscaled putput
             # of the previous one
             if i == first_layer_idx and i != self.n_layers - 1 and alpha < 1:
-                skip_first_block_feature_maps =  self.from_rgbs[final_resolution_idx - 1](downscale_2d(image))
+                if self.convs[i].downsample:
+                    image = downscale_2d(image)
+                skip_first_block_feature_maps =  self.from_rgbs[final_resolution_idx - 1](image)
                 feature_maps = alpha * feature_maps + (1 - alpha) * skip_first_block_feature_maps
 
         return latent_vector
