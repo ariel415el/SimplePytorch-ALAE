@@ -3,25 +3,49 @@ import torch
 import torch.tensor
 import torch.utils
 import torch.utils.data
-from torchvision import datasets as tv_datasets
-from torchvision.datasets.utils import download_and_extract_archive
+from torchvision.datasets.utils import download_and_extract_archive, download_file_from_google_drive
 from torchvision.datasets.mnist import read_image_file
 from torch.utils.data import Dataset
-import torchvision.transforms as transforms
 from torch.utils.data import random_split
 import os
 import tarfile
 import cv2
+from tqdm import tqdm
+
 
 MNIST_WORKING_DIM=28
 LFW_WORKING_DIM=64
+CELEB_A_WORKING_DIM=64
+FFHQ_WORKING_DIM=64
 VAL_SET_PORTION=0.05
+
+
+class ImgLoader:
+    def __init__(self, center_crop_size, resize, normalize, dtype):
+        self.center_crop_size = center_crop_size
+        self.resize = resize
+        self.normalize = normalize
+        self.dtype = dtype
+
+    def __call__(self, path):
+        img = cv2.imread(path)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        if self.center_crop_size:
+            img = center_crop(img, self.center_crop_size)
+        if self.resize:
+            img = cv2.resize(img, (self.resize, self.resize))
+        img = img.transpose(2, 0, 1)
+        if self.normalize:
+            img = img / 127.5 - 1
+        img = img.astype(self.dtype)
+        return img
 
 
 def center_crop(img, size):
     y_start = int((img.shape[0] - size)/2)
     x_start = int((img.shape[1] - size)/2)
     return img[y_start: y_start + size, x_start: x_start + size]
+
 
 def download_mnist(data_dir):
     """
@@ -65,6 +89,8 @@ def download_lwf(data_dir):
     Dwonloads LFW alligned images (deep funneled version) from the official site
     crops and normalizes them and saves them as a tensor
     """
+    print("Downloadint LFW from official site...")
+
     if not os.path.exists(os.path.join(data_dir, 'lfw-deepfunneled.tgz')):
         download_and_extract_archive("http://vis-www.cs.umass.edu/lfw/lfw-deepfunneled.tgz",
                                      md5='68331da3eb755a505a502b5aacb3c201',
@@ -73,36 +99,49 @@ def download_lwf(data_dir):
         f = tarfile.open(os.path.join(data_dir, 'lfw-deepfunneled.tgz'), 'r:gz')
         f.extractall(data_dir)
         f.close()
-    imgs = []
-    if not os.path.exists(os.path.join(data_dir, 'all_imgs.pt')):
-        for celeb_name in os.listdir(os.path.join(data_dir, 'lfw-deepfunneled')):
-            for fname in os.listdir(os.path.join(data_dir, 'lfw-deepfunneled', celeb_name)):
-                img = cv2.imread(os.path.join(data_dir, 'lfw-deepfunneled', celeb_name, fname))
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                img = center_crop(img, 150)
-                img = cv2.resize(img, (LFW_WORKING_DIM, LFW_WORKING_DIM))
-                img = img.transpose(2,0,1)
-                img = img / 127.5 - 1
-                imgs.append(torch.tensor(img, dtype=torch.float32))
-        with open(os.path.join(data_dir, 'all_imgs.pt'), 'wb') as f:
-            torch.save(torch.stack(imgs), f)
 
-    print('Done!')
+
+def download_celeba(data_dir):
+    print("Downloadint Celeb-a from kaggle...")
+    os.environ['KAGGLE_USERNAME'] = "ariel415el"
+    os.environ['KAGGLE_KEY'] = "831db7b1693cd81d31ce16e340ddba03"
+    import kaggle
+    kaggle.api.dataset_download_files('jessicali9530/celeba-dataset', path=data_dir, unzip=True, quiet=False)
+    print("Done!")
+
+def download_ffhq_thumbnails(data_dir):
+    print("Downloadint FFHQ-thumbnails from kaggle...")
+    os.environ['KAGGLE_USERNAME'] = "ariel415el"
+    os.environ['KAGGLE_KEY'] = "831db7b1693cd81d31ce16e340ddba03"
+    import kaggle
+    kaggle.api.dataset_download_files('greatgamedota/ffhq-face-data-set', path=data_dir, unzip=True, quiet=False)
+    print("Done.")
+
 
 def get_lfw(data_dir):
     """
     Returns an LFW train and val datalsets
     """
     download_lwf(data_dir)
-    data = torch.load(os.path.join(data_dir, "all_imgs.pt"))
+    pt_name = f"LFW-{LFW_WORKING_DIM}x{LFW_WORKING_DIM}.pt"
+    if not os.path.exists(os.path.join(data_dir, pt_name)):
+        imgs = []
+        img_loader = ImgLoader(center_crop_size=150, resize=LFW_WORKING_DIM, normalize=True, dtype=np.float32)
+        for celeb_name in os.listdir(os.path.join(data_dir, 'lfw-deepfunneled')):
+            for fname in os.listdir(os.path.join(data_dir, 'lfw-deepfunneled', celeb_name)):
+                img = img_loader(os.path.join(data_dir, 'lfw-deepfunneled', celeb_name, fname))
+                imgs.append(torch.tensor(img, dtype=torch.float32))
+        with open(os.path.join(data_dir, pt_name), 'wb') as f:
+            torch.save(torch.stack(imgs), f)
 
-    # data = data[:,0].reshape(-1, 1, 64, 64)
+    data = torch.load(os.path.join(data_dir, pt_name))
 
-    dataset = SimpleDataset(data)
+    dataset = MemoryDataset(data)
     val_size = int(len(dataset) * VAL_SET_PORTION)
     train_dataset, val_dataset = random_split(dataset, [len(dataset) - val_size, val_size], generator=torch.Generator().manual_seed(42))
 
     return train_dataset, val_dataset, LFW_WORKING_DIM
+
 
 def get_mnist(data_dir):
     """
@@ -111,12 +150,44 @@ def get_mnist(data_dir):
     download_mnist(data_dir)
     train_data = torch.load(os.path.join(data_dir, "train_data.pt"))
     test_data = torch.load(os.path.join(data_dir, "test_data.pt"))
-    train_dataset, val_dataset = SimpleDataset(train_data), SimpleDataset(test_data)
+    train_dataset, val_dataset = MemoryDataset(train_data), MemoryDataset(test_data)
 
     return train_dataset, val_dataset, MNIST_WORKING_DIM
 
 
-class SimpleDataset(Dataset):
+def get_celeba(data_dir):
+    download_celeba(data_dir)
+    imgs_dir = os.path.join(data_dir, 'img_align_celeba', 'img_align_celeba')
+    img_loader = ImgLoader(center_crop_size=170, resize=CELEB_A_WORKING_DIM, normalize=True, dtype=np.float32)
+    dataset = DiskDataset(os.listdir(imgs_dir), img_loader)
+    val_size = int(len(dataset) * VAL_SET_PORTION)
+    train_dataset, val_dataset = random_split(dataset, [len(dataset) - val_size, val_size], generator=torch.Generator().manual_seed(42))
+
+    return train_dataset, val_dataset, CELEB_A_WORKING_DIM
+
+
+def get_ffhq(data_dir):
+    download_ffhq_thumbnails(data_dir)
+    imgs_dir = os.path.join(data_dir, 'thumbnails128x128')
+    pt_file = f"FFGQ_Thumbnail-{FFHQ_WORKING_DIM}x{FFHQ_WORKING_DIM}.pt"
+    if not os.path.exists(os.path.join(data_dir, pt_file)):
+        imgs = []
+        img_loader = ImgLoader(center_crop_size=None, resize=FFHQ_WORKING_DIM, normalize=True, dtype=np.float32)
+        for img_name in tqdm(os.listdir(imgs_dir)):
+            fname = os.path.join(imgs_dir, img_name)
+            img = img_loader(fname)
+            imgs.append(torch.tensor(img, dtype=torch.float32))
+        with open(os.path.join(data_dir, pt_file), 'wb') as f:
+            torch.save(torch.stack(imgs), f)
+
+    data = torch.load(os.path.join(data_dir, pt_file))
+    dataset = MemoryDataset(data)
+    val_size = int(len(dataset) * VAL_SET_PORTION)
+    train_dataset, val_dataset = random_split(dataset, [len(dataset) - val_size, val_size], generator=torch.Generator().manual_seed(42))
+
+    return train_dataset, val_dataset, FFHQ_WORKING_DIM
+
+class MemoryDataset(Dataset):
     def __init__(self, data_matrix):
         self.data_matrix = data_matrix
 
@@ -128,6 +199,18 @@ class SimpleDataset(Dataset):
 
     def get_data(self):
         return self.data_matrix
+
+
+class DiskDataset(Dataset):
+    def __init__(self, image_paths, load_image_function):
+        self.image_paths = image_paths
+        self.load_image_function = load_image_function
+
+    def __len__(self):
+        return len(self.image_paths)
+
+    def __getitem__(self, idx):
+        return self.load_image_function(self.image_paths[idx])
 
 
 class EndlessDataloader:
@@ -149,30 +232,13 @@ class EndlessDataloader:
         return real_image
 
 
-def get_celeba(data_dir):
-    # train_dataset = tv_datasets.CelebA(data_dir, split='all', download=True)
-    # test_dataset = tv_datasets.MNIST(data_dir, train=False, download=True)
-
-    dataset = tv_datasets.ImageFolder(root=data_dir,
-                               transform=transforms.Compose([
-                                   transforms.Resize(64),
-                                   transforms.CenterCrop(64),
-                                   transforms.ToTensor(),
-                                   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                                   # lambda x: x[0][None,:] # test with FC mode
-                               ]))
-
-    val_size = int(len(dataset) * VAL_SET_PORTION)
-    train_dataset, val_dataset = random_split(dataset, [len(dataset) - val_size, val_size], generator=torch.Generator().manual_seed(42))
-
-    return train_dataset, val_dataset, 64
-
-
 def get_dataset(data_root, dataset_name):
     if dataset_name.lower() == 'mnist':
         train_dataset, test_dataset, img_dim = get_mnist(os.path.join(data_root, 'Mnist'))
     elif dataset_name.lower() == 'celeb-a':
         train_dataset, test_dataset, img_dim = get_celeba(os.path.join(data_root, 'Celeb-a'))
+    elif dataset_name.lower() == 'ffhq':
+        train_dataset, test_dataset, img_dim = get_ffhq(os.path.join(data_root, 'FFHQ-thumbnails'))
     elif dataset_name.lower() == 'lfw':
         train_dataset, test_dataset, img_dim = get_lfw(os.path.join(data_root, 'LFW'))
 
@@ -207,5 +273,7 @@ def get_dataloader(dataset, batch_size, resize, device):
 
 
 if __name__ == '__main__':
-    get_mnist("../data/LFW")
-    get_lfw("../data/LFW")
+    train_dataset, val_dataset, mid = get_celeba('/home/ariel/projects/LabProject-ALAE/data/Celeb-a')
+    x = 1
+    # get_mnist("../data/LFW")
+    # get_lfw("../data/LFW")

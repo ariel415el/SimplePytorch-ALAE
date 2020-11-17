@@ -9,6 +9,8 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def find_latest_checkpoint(ckpt_dir):
+    if not os.path.exists(ckpt_dir):
+        return "None"
     oldest_to_newest_paths = sorted(Path(ckpt_dir).iterdir(), key=os.path.getmtime)
     return [x._str for x in oldest_to_newest_paths if x._str.endswith("pt")][0]
 
@@ -43,11 +45,11 @@ def train_StyleGan_lfw(output_dir):
     model.train(train_dataset, test_samples_z, output_dir)
 
 
-def train_ALAE_lfw(output_dir):
-
+def train_StyleALAE_on_faces(output_dir, dataset_name):
     # Create datasets
+    output_dir  = os.path.join(output_dir, f"StyleALAE-{dataset_name}")
     LATENT_SPACE_SIZE = 512
-    train_dataset, test_dataset, img_dim = get_dataset("data", 'lfw')
+    train_dataset, test_dataset, img_dim = get_dataset("data", dataset_name)
     hp = {
             "resolutions": [4, 8, 16, 32, 64],
             "learning_rates": [0.001, 0.001, 0.001, 0.001, 0.001],
@@ -70,4 +72,4 @@ def train_ALAE_lfw(output_dir):
 if __name__ == '__main__':
     # train_ALAE_mnist(OUTPUT_DIR + "/ALAE_mnist")
     # train_StyleGan_lfw(OUTPUT_DIR + "/StyleGAN_LFW")
-    train_ALAE_lfw(OUTPUT_DIR + "/StyleALAE_LFW")
+    train_StyleALAE_on_faces(OUTPUT_DIR, 'LFW')
