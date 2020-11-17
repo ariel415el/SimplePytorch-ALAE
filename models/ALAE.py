@@ -184,10 +184,10 @@ class StyleALAE(ALAE):
                 batch_real_data = dataloader.next()
                 self.perform_train_step(batch_real_data, tracker, final_resolution_idx=self.res_idx, alpha=alpha)
 
+                global_steps += 1
                 progress_tag = f"gs-{global_steps}_res-{res}x{res}_alpha-{alpha:.2f}"
                 progress_bar.set_description(progress_tag)
 
-                global_steps += 1
                 if global_steps % self.hp['dump_imgs_freq'] == 0:
                     tracker.register_means(global_steps)
                     tracker.plot()
@@ -197,7 +197,6 @@ class StyleALAE(ALAE):
                 if global_steps % self.hp['checkpoint_freq'] == 0:
                     self.save_train_state(os.path.join(output_dir, 'checkpoints', f"ckpt_{progress_tag}.pt"))
             self.res_idx += 1
-            self.save_train_state(os.path.join(output_dir, 'checkpoints', f"ckpt_phase{self.res_idx}-end.pt"))
         self.save_train_state(os.path.join(output_dir, 'checkpoints', f"ckpt_final.pt"))
 
     def load_train_state(self, checkpoint_path):
@@ -209,10 +208,11 @@ class StyleALAE(ALAE):
             self.D.load_state_dict(checkpoint['D'])
             self.ED_optimizer.load_state_dict(checkpoint['ED_optimizer'])
             self.FG_optimizer.load_state_dict(checkpoint['FG_optimizer'])
-            self.res_idx = checkpoint['final_completed_res_idx']
+            self.res_idx = checkpoint['last_completed_res_idx']
             print(f"Checkpoint found and loaded. Starting from resolution {2**(2+self.res_idx)}")
         else:
             print("Starting training from scratch ")
+
     def save_train_state(self, save_path):
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         torch.save(
@@ -223,7 +223,7 @@ class StyleALAE(ALAE):
                 'D': self.D.state_dict(),
                 'ED_optimizer': self.ED_optimizer.state_dict(),
                 'FG_optimizer': self.FG_optimizer.state_dict(),
-                "final_completed_res_idx": self.res_idx
+                "last_completed_res_idx": self.res_idx
             },
             save_path
         )

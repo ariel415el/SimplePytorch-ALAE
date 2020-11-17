@@ -93,9 +93,9 @@ def download_lwf(data_dir):
     Dwonloads LFW alligned images (deep funneled version) from the official site
     crops and normalizes them and saves them as a tensor
     """
-    print("Downloadint LFW from official site...")
 
     if not os.path.exists(os.path.join(data_dir, 'lfw-deepfunneled.tgz')):
+        print("Downloadint LFW from official site...")
         download_and_extract_archive("http://vis-www.cs.umass.edu/lfw/lfw-deepfunneled.tgz",
                                      md5='68331da3eb755a505a502b5aacb3c201',
                                      download_root=data_dir, filename='lfw-deepfunneled.tgz')

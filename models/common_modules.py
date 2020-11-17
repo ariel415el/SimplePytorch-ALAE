@@ -83,9 +83,11 @@ class GeneratorFC(nn.Module):
 
 
 class StyleGeneratorBlock(nn.Module):
-    def __init__(self, latent_dim, in_channels, out_channels, is_first_block=False):
+    def __init__(self, latent_dim, in_channels, out_channels, is_first_block=False, upscale=False):
         super(StyleGeneratorBlock, self).__init__()
+        assert not (is_first_block and upscale), "You should not upscale if this is the first block in the generator"
         self.is_first_block = is_first_block
+        self.upscale = upscale
 
         if is_first_block:
             self.const_input = nn.Parameter(torch.randn(1, out_channels, MIN_LAYER_DIM, MIN_LAYER_DIM))
@@ -130,10 +132,11 @@ class StylleGanGenerator(nn.Module):
         self.progression = nn.ModuleList(
             [
                 StyleGeneratorBlock(latent_dim, 512, 256, is_first_block=True),  # 4x4 img
-                StyleGeneratorBlock(latent_dim, 256, 128),  # 8x8 img
-                StyleGeneratorBlock(latent_dim, 128, 64),  # 16x16 img
-                StyleGeneratorBlock(latent_dim, 64, 32),  # 32x32 img
-                StyleGeneratorBlock(latent_dim, 32, 16)  # 64x64 img
+                StyleGeneratorBlock(latent_dim, 256, 128, upscale=True),  # 8x8 img
+                StyleGeneratorBlock(latent_dim, 128, 64, upscale=True),  # 16x16 img
+                StyleGeneratorBlock(latent_dim, 64, 32, upscale=True),  # 32x32 img
+                StyleGeneratorBlock(latent_dim, 32, 16, upscale=True),    # 64x64 img
+                StyleGeneratorBlock(latent_dim, 16, 16)  # 64x64 img
             ]
         )
         self.to_rgb = nn.ModuleList(
@@ -142,6 +145,7 @@ class StylleGanGenerator(nn.Module):
                 Lreq_Conv2d(128, 3, 1, 0),
                 Lreq_Conv2d(64, 3, 1, 0),
                 Lreq_Conv2d(32, 3, 1, 0),
+                Lreq_Conv2d(16, 3, 1, 0),
                 Lreq_Conv2d(16, 3, 1, 0),
             ]
         )
@@ -243,22 +247,26 @@ class PGGanDiscriminator(nn.Module):
 
 
 class AlaeEncoderBlockBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, latent_dim, downsample=True):
+    def __init__(self, in_channels, out_channels, latent_dim, downsample=False, is_last_block=False):
         super(AlaeEncoderBlockBlock, self).__init__()
+        assert not (is_last_block and downsample), "You should not downscale after last block"
         self.downsample = downsample
+        self.is_last_block = is_last_block
         self.conv1 = Lreq_Conv2d(in_channels, in_channels, 3, 1)
         self.lrelu = nn.LeakyReLU(0.2)
         self.instance_norm_1 = StyleInstanceNorm2d(in_channels)
         self.c_1 = LREQ_FC_Layer(2 * in_channels, latent_dim)
-        if downsample:
-            self.conv2 = torch.nn.Sequential(LearnablePreScaleBlur(in_channels),
-                                             Lreq_Conv2d(in_channels, out_channels, 3, 1),
-                                             torch.nn.AvgPool2d(2, 2))
-            self.instance_norm_2 = StyleInstanceNorm2d(out_channels)
-            self.c_2 = LREQ_FC_Layer(2 * out_channels, latent_dim)
-        else: # Last layer
+        if is_last_block:
             self.conv2 = Lreq_Conv2d(in_channels, out_channels, MIN_LAYER_DIM, 0)
             self.c_2 = LREQ_FC_Layer(out_channels, latent_dim)
+        else:
+            scale = 2 if downsample else 1
+            self.conv2 = torch.nn.Sequential(LearnablePreScaleBlur(in_channels),
+                                             Lreq_Conv2d(in_channels, out_channels, 3, 1),
+                                             torch.nn.AvgPool2d(scale, scale))
+            self.instance_norm_2 = StyleInstanceNorm2d(out_channels)
+            self.c_2 = LREQ_FC_Layer(2 * out_channels, latent_dim)
+
 
     def forward(self, x):
         x = self.conv1(x)
@@ -284,18 +292,20 @@ class AlaeEncoder(nn.Module):
         super().__init__()
         self.latent_size = latent_dim
         self.from_rgbs = nn.ModuleList([
-            Lreq_Conv2d(3, 256, 1, 0),  # 4x4 imgs
+            Lreq_Conv2d(3, 256, 1, 0), # 4x4 imgs
             Lreq_Conv2d(3, 128, 1, 0),
             Lreq_Conv2d(3, 64, 1, 0),
             Lreq_Conv2d(3, 32, 1, 0),
+            Lreq_Conv2d(3, 16, 1, 0), # 64x64 imgs
             Lreq_Conv2d(3, 16, 1, 0) # 64x64 imgs
         ])
         self.convs = nn.ModuleList([
-            AlaeEncoderBlockBlock(16, 32, latent_dim),
-            AlaeEncoderBlockBlock(32, 64, latent_dim),
-            AlaeEncoderBlockBlock(64, 128, latent_dim),
-            AlaeEncoderBlockBlock(128, 256, latent_dim),
-            AlaeEncoderBlockBlock(256, 512, latent_dim, downsample=False)
+            AlaeEncoderBlockBlock(16, 16, latent_dim), # 64x64
+            AlaeEncoderBlockBlock(16, 32, latent_dim, downsample=True), # 64x64
+            AlaeEncoderBlockBlock(32, 64, latent_dim, downsample=True),
+            AlaeEncoderBlockBlock(64, 128, latent_dim, downsample=True),
+            AlaeEncoderBlockBlock(128, 256, latent_dim, downsample=True),
+            AlaeEncoderBlockBlock(256, 512, latent_dim, is_last_block=True) # 4x4
         ])
         assert(len(self.convs) == len(self.from_rgbs))
         self.n_layers = len(self.convs)
