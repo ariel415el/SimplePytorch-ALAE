@@ -49,17 +49,25 @@ def train_StyleALAE_on_faces(output_dir, dataset_name):
     # Create datasets
     output_dir  = os.path.join(output_dir, f"StyleALAE-{dataset_name}")
     LATENT_SPACE_SIZE = 512
-    train_dataset, test_dataset, img_dim = get_dataset("data", dataset_name)
+    dim = 32
+    train_dataset, test_dataset = get_dataset("data", dataset_name, dim=dim)
     hp = {
-            "resolutions": [4, 8, 16, 32, 64],
-            "learning_rates": [0.001, 0.0015, 0.002, 0.0025, 0.003],
-            "phase_lengths": [200_000, 400_000, 600_000, 800_000, 1000_000],
-            # "phase_lengths": [128, 128, 128, 128, 128],
-            "batch_sizes": [512, 512, 256, 256, 128],
-            "n_critic": 1
+            "resolutions": [4, 8, 16, 32, 32, 32, 32],
+            "channels": [512, 512, 256, 128, 64, 32, 16],
+            "learning_rates": [0.001, 0.0015, 0.002, 0.0025, 0.003, 0.003, 0.003],
+            "phase_lengths": [200_000, 400_000, 600_000, 800_000, 1000_000, 1000_000, 1000_000],
+            "batch_sizes": [512, 256, 128, 64, 64, 64, 64],
+            "n_critic": 1,
+            "dump_imgs_freq": 2000,
+            "checkpoint_freq": 10000
                    }
+
+    # # debug code
+    # hp["phase_lengths"] = [8] * len(hp["resolutions"])
+    # hp["batch_sizes"] = [8] * len(hp["resolutions"])
+
     # Create model
-    model = StyleALAE(z_dim=LATENT_SPACE_SIZE, w_dim=LATENT_SPACE_SIZE, image_dim=img_dim, hyper_parameters=hp,device=device)
+    model = StyleALAE(z_dim=LATENT_SPACE_SIZE, w_dim=LATENT_SPACE_SIZE, image_dim=dim, hyper_parameters=hp, device=device)
     model.load_train_state(find_latest_checkpoint(os.path.join(output_dir, 'checkpoints')))
 
     test_dataloader = get_dataloader(test_dataset, batch_size=NUMED_BUG_IMAGES, resize=None, device=device)

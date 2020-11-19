@@ -184,6 +184,9 @@ class Lreq_Conv2d(nn.Module):
         self.std = np.sqrt(2.0) / np.sqrt(self.fan_in)
         self.reset_parameters()
 
+    def __str__(self):
+        return f"LreqConv2d({self.in_channels}, {self.out_channels}, k={self.kernel_size[0]}, p={self.padding[0]})"
+
     def reset_parameters(self):
         init.normal_(self.weight, mean=0, std=self.std / self.lrmul)
         setattr(self.weight, 'lr_equalization_coef', self.std)

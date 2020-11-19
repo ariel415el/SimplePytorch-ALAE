@@ -1,6 +1,8 @@
 from utils.costume_layers import *
 
-MIN_LAYER_DIM = 4
+STARTING_DIM = 4
+STARTING_CHANNELS = 512
+
 
 class MappingFromLatent(nn.Module):
     def __init__(self, num_layers=5, input_dim=256, out_dim=256):
@@ -88,9 +90,8 @@ class StyleGeneratorBlock(nn.Module):
         assert not (is_first_block and upscale), "You should not upscale if this is the first block in the generator"
         self.is_first_block = is_first_block
         self.upscale = upscale
-
         if is_first_block:
-            self.const_input = nn.Parameter(torch.randn(1, out_channels, MIN_LAYER_DIM, MIN_LAYER_DIM))
+            self.const_input = nn.Parameter(torch.randn(1, out_channels, STARTING_DIM, STARTING_DIM))
         else:
             self.blur = LearnablePreScaleBlur(out_channels)
             self.conv1 = Lreq_Conv2d(in_channels, out_channels, 3, padding=1)
@@ -102,6 +103,11 @@ class StyleGeneratorBlock(nn.Module):
         self.adain = AdaIn(in_channels)
         self.lrelu = nn.LeakyReLU(0.2)
         self.conv2 = Lreq_Conv2d(out_channels, out_channels, 3, padding=1)
+
+        self.name = f"StyleBlock({latent_dim}, {in_channels}, {out_channels}, is_first_block={is_first_block}, upscale={upscale})"
+
+    def __str__(self):
+        return self. name
 
     def forward(self, input, latent_w, noise):
         if self.is_first_block:
@@ -126,35 +132,33 @@ class StyleGeneratorBlock(nn.Module):
 
 
 class StylleGanGenerator(nn.Module):
-    def __init__(self, latent_dim, output_img_dim=64):
-        assert output_img_dim == 64
+    def __init__(self, latent_dim, progression):
         super(StylleGanGenerator, self).__init__()
         self.latent_dim = latent_dim
-        self.progression = nn.ModuleList(
-            [
-                StyleGeneratorBlock(latent_dim, 512, 256, is_first_block=True),  # 4x4 img
-                StyleGeneratorBlock(latent_dim, 256, 128, upscale=True),  # 8x8 img
-                StyleGeneratorBlock(latent_dim, 128, 64, upscale=True),  # 16x16 img
-                StyleGeneratorBlock(latent_dim, 64, 32, upscale=True),  # 32x32 img
-                StyleGeneratorBlock(latent_dim, 32, 16, upscale=True),    # 64x64 img
-                StyleGeneratorBlock(latent_dim, 16, 16)  # 64x64 img
-            ]
-        )
-        self.to_rgb = nn.ModuleList(
-            [
-                Lreq_Conv2d(256, 3, 1, 0),
-                Lreq_Conv2d(128, 3, 1, 0),
-                Lreq_Conv2d(64, 3, 1, 0),
-                Lreq_Conv2d(32, 3, 1, 0),
-                Lreq_Conv2d(16, 3, 1, 0),
-                Lreq_Conv2d(16, 3, 1, 0),
-            ]
-        )
+        assert progression[0][0] == STARTING_DIM, f"Resolution progression should start from {STARTING_DIM}"
+        self.to_rgb = nn.ModuleList([])
+        self.conv_blocks = nn.ModuleList([])
+        for i in range(len(progression)):
+            self.to_rgb.append(Lreq_Conv2d(progression[i][1], 3, 1, 0))
+            if i == 0:
+                self.conv_blocks.append(StyleGeneratorBlock(latent_dim, STARTING_CHANNELS, progression[i][1],
+                                                            is_first_block=True))
+            else:
+                upscale = (progression[i - 1][0] * 2 == progression[i][0])
+                self.conv_blocks.append(StyleGeneratorBlock(latent_dim, progression[i - 1][1], progression[i][1],
+                                                            upscale=upscale))
+        print("Creating Style-Generator:")
+        print("\ttoRgb")
+        for i in range(len(self.conv_blocks)):
+            print("\t", self.to_rgb[i])
+        print("\tStyleBlock")
+        for i in range(len(self.conv_blocks)):
+            print("\t", self.conv_blocks[i])
 
     def forward(self, w, final_resolution_idx, alpha):
         generated_img = None
         feature_maps = None
-        for i, block in enumerate(self.progression):
+        for i, block in enumerate(self.conv_blocks):
             # Separate noise for each block
             noise = torch.randn((w.shape[0], 1, 1, 1), dtype=torch.float32).to(w.device)
 
@@ -186,7 +190,7 @@ class PGGanDescriminatorBlock(nn.Module):
                                              Lreq_Conv2d(out_channels, out_channels, 3, 1),
                                              torch.nn.AvgPool2d(2, 2))
         else:
-            self.conv2 = Lreq_Conv2d(out_channels, out_channels, MIN_LAYER_DIM, 0)
+            self.conv2 = Lreq_Conv2d(out_channels, out_channels, STARTING_DIM, 0)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -229,7 +233,7 @@ class PGGanDiscriminator(nn.Module):
             if i == self.n_layers - 1:
                 res_var = feature_maps.var(0, unbiased=False) + 1e-8 # Avoid zero
                 res_std = torch.sqrt(res_var)
-                mean_std = res_std.mean().expand(feature_maps.size(0), 1, MIN_LAYER_DIM, MIN_LAYER_DIM)
+                mean_std = res_std.mean().expand(feature_maps.size(0), 1, STARTING_DIM, STARTING_DIM)
                 feature_maps = torch.cat([feature_maps, mean_std], 1)
 
             feature_maps = self.convs[i](feature_maps)
@@ -249,7 +253,7 @@ class PGGanDiscriminator(nn.Module):
 
 
 class AlaeEncoderBlockBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, latent_dim, downsample=False, is_last_block=False):
+    def __init__(self, latent_dim, in_channels, out_channels, downsample=False, is_last_block=False):
         super(AlaeEncoderBlockBlock, self).__init__()
         assert not (is_last_block and downsample), "You should not downscale after last block"
         self.downsample = downsample
@@ -259,7 +263,7 @@ class AlaeEncoderBlockBlock(nn.Module):
         self.instance_norm_1 = StyleInstanceNorm2d(in_channels)
         self.c_1 = LREQ_FC_Layer(2 * in_channels, latent_dim)
         if is_last_block:
-            self.conv2 = Lreq_Conv2d(in_channels, out_channels, MIN_LAYER_DIM, 0)
+            self.conv2 = Lreq_Conv2d(in_channels, out_channels, STARTING_DIM, 0)
             self.c_2 = LREQ_FC_Layer(out_channels, latent_dim)
         else:
             scale = 2 if downsample else 1
@@ -268,6 +272,11 @@ class AlaeEncoderBlockBlock(nn.Module):
                                              torch.nn.AvgPool2d(scale, scale))
             self.instance_norm_2 = StyleInstanceNorm2d(out_channels)
             self.c_2 = LREQ_FC_Layer(2 * out_channels, latent_dim)
+
+        self.name = f"EncodeBlock({latent_dim}, {in_channels}, {out_channels}, is_last_block={is_last_block}, downsample={downsample})"
+
+    def __str__(self):
+        return self.name
 
     def forward(self, x):
         x = self.conv1(x)
@@ -288,27 +297,35 @@ class AlaeEncoderBlockBlock(nn.Module):
 
 
 class AlaeEncoder(nn.Module):
-    def __init__(self, input_img_dim, latent_dim):
+    def __init__(self, latent_dim, progression):
         super().__init__()
+        assert progression[0][0] == STARTING_DIM, f"Resolution progression should start from {STARTING_DIM}"
         self.latent_size = latent_dim
-        self.from_rgbs = nn.ModuleList([
-            Lreq_Conv2d(3, 256, 1, 0), # 4x4 imgs
-            Lreq_Conv2d(3, 128, 1, 0),
-            Lreq_Conv2d(3, 64, 1, 0),
-            Lreq_Conv2d(3, 32, 1, 0),
-            Lreq_Conv2d(3, 16, 1, 0), # 64x64 imgs
-            Lreq_Conv2d(3, 16, 1, 0) # 64x64 imgs
-        ])
-        self.convs = nn.ModuleList([
-            AlaeEncoderBlockBlock(16, 16, latent_dim), # 64x64
-            AlaeEncoderBlockBlock(16, 32, latent_dim, downsample=True), # 64x64
-            AlaeEncoderBlockBlock(32, 64, latent_dim, downsample=True),
-            AlaeEncoderBlockBlock(64, 128, latent_dim, downsample=True),
-            AlaeEncoderBlockBlock(128, 256, latent_dim, downsample=True),
-            AlaeEncoderBlockBlock(256, 512, latent_dim, is_last_block=True) # 4x4
-        ])
-        assert(len(self.convs) == len(self.from_rgbs))
-        self.n_layers = len(self.convs)
+        self.from_rgbs = nn.ModuleList([])
+        self.conv_blocks = nn.ModuleList([])
+        for i in range(len(progression)):
+            self.from_rgbs.append(Lreq_Conv2d(3, progression[i][1], 1, 0))
+        for i in range(len(progression) - 1, -1, -1):
+            if i == 0:
+                self.conv_blocks.append(AlaeEncoderBlockBlock(latent_dim, progression[i][1], progression[i - 1][1],
+                                                              is_last_block=True))
+            else:
+                downsample = progression[i][0] / 2 == progression[i - 1][0]
+                self.conv_blocks.append(AlaeEncoderBlockBlock(latent_dim, progression[i][1], progression[i - 1][1],
+                                                            downsample=downsample))
+
+
+        assert(len(self.conv_blocks) == len(self.from_rgbs))
+        self.n_layers = len(self.conv_blocks)
+
+        print("Creating ALAE-Encoder:")
+        print("\tfromRgb")
+        for i in range(len(self.conv_blocks)):
+            print("\t", self.from_rgbs[i])
+        print("\tEncodeBlock")
+        for i in range(len(self.conv_blocks)):
+            print("\t", self.conv_blocks[i])
+
 
     def forward(self, image, final_resolution_idx, alpha=1):
         latent_vector = torch.zeros(image.shape[0], self.latent_size).to(image.device)
@@ -317,14 +334,14 @@ class AlaeEncoder(nn.Module):
 
         first_layer_idx = self.n_layers - final_resolution_idx - 1
         for i in range(first_layer_idx, self.n_layers):
-            feature_maps, w1, w2 = self.convs[i](feature_maps)
+            feature_maps, w1, w2 = self.conv_blocks[i](feature_maps)
             latent_vector += w1 + w2
 
             # If this is the first conv block to be run and this is not the last one the there is an already stabilized
             # previous scale layers : Alpha blend the output of the unstable new layer with the downscaled putput
             # of the previous one
             if i == first_layer_idx and i != self.n_layers - 1 and alpha < 1:
-                if self.convs[i].downsample:
+                if self.conv_blocks[i].downsample:
                     image = downscale_2d(image)
                 skip_first_block_feature_maps =  self.from_rgbs[final_resolution_idx - 1](image)
                 feature_maps = alpha * feature_maps + (1 - alpha) * skip_first_block_feature_maps

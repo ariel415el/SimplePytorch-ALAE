@@ -6,21 +6,39 @@ import os
 from utils.tracker import LossTracker
 from utils.loss_utils import compute_r1_gradient_penalty
 from datasets import get_dataloader, EndlessDataloader
-
+COMMON_DEFAULT = {"lr":0.001, "g_penalty_coeff": 10, 'descriminator_layers':3}
+STYLE_ALE_DEFAULT = {
+            'mapping_layers':8,
+            "resolutions": [4, 8, 16, 32, 64],
+            "channels": [256, 256, 128, 64, 32],
+            "learning_rates": [0.001, 0.001, 0.001, 0.001, 0.001],
+            # "phase_lengths": [400_000, 600_000, 800_000, 1_000_000, 2_000_000],
+            "phase_lengths": [128, 128, 128, 128, 128],
+            "batch_sizes": [128, 128, 128, 128, 128],
+            "n_critic": 1,
+            "dump_imgs_freq" : 1000,
+            "checkpoint_freq": 10000
+                   }
+FC_ALAE_DEFAULT = {"batch_size": 128, "epochs":100, 'mapping_layers':6}
 
 class ALAE:
     def __init__(self, z_dim, w_dim, image_dim, architecture_mode, hyper_parameters, device):
         self.device = device
         self.z_dim = z_dim
-        self.hp = {'lr': 0.002, 'mapping_layers': 6, "g_penalty_coeff": 10, 'descriminator_layers':3}
-        self.hp.update(hyper_parameters)
+        self.hp = COMMON_DEFAULT
 
         if architecture_mode == "FC":
+            self.hp.update(FC_ALAE_DEFAULT)
+            self.hp.update(hyper_parameters)
+
             self.G = GeneratorFC(latent_dim=w_dim, output_img_dim=image_dim).to(device).train()
             self.E = EncoderFC(input_img_dim=image_dim, latent_dim=w_dim).to(device).train()
         else:
-            self.G = StylleGanGenerator(latent_dim=w_dim, output_img_dim=image_dim).to(device).train()
-            self.E = AlaeEncoder(input_img_dim=image_dim, latent_dim=w_dim).to(device).train()
+            self.hp.update(STYLE_ALE_DEFAULT)
+            self.hp.update(hyper_parameters)
+            progression = list(zip(self.hp['resolutions'], self.hp['channels']))
+            self.G = StylleGanGenerator(latent_dim=w_dim, progression=progression).to(device).train()
+            self.E = AlaeEncoder(latent_dim=w_dim, progression=progression).to(device).train()
         self.F = MappingFromLatent(input_dim=z_dim, out_dim=w_dim, num_layers=self.hp['mapping_layers']).to(device).train()
         self.D = DiscriminatorFC(input_dim=w_dim, num_layers=self.hp['descriminator_layers']).to(device).train()
 
@@ -130,15 +148,7 @@ class StyleALAE(ALAE):
     def __init__(self, z_dim, w_dim, image_dim, hyper_parameters, device):
         super().__init__( z_dim, w_dim, image_dim, 'cnn', hyper_parameters, device)
         self.res_idx = 0
-        self.hp.update({
-            "resolutions": [4, 8, 16, 32, 64],
-            "learning_rates": [0.001, 0.001, 0.001, 0.001, 0.001],
-            "phase_lengths": [400_000, 600_000, 800_000, 1_000_000, 2_000_000],
-            "batch_sizes": [128, 128, 128, 128, 128],
-            "n_critic": 1,
-            "dump_imgs_freq" : 1000,
-            "checkpoint_freq": 10000
-                   })
+        self.hp.update(STYLE_ALE_DEFAULT)
         self.hp.update(hyper_parameters)
 
     def set_optimizers_lr(self, new_lr):
@@ -209,7 +219,7 @@ class StyleALAE(ALAE):
             self.ED_optimizer.load_state_dict(checkpoint['ED_optimizer'])
             self.FG_optimizer.load_state_dict(checkpoint['FG_optimizer'])
             self.res_idx = checkpoint['last_completed_res_idx']
-            print(f"Checkpoint found and loaded. Starting from resolution {2**(2+self.res_idx)}")
+            print(f"Checkpoint found and loaded. Starting from resolution number {self.res_idx}")
         else:
             print("Starting training from scratch ")
 
@@ -232,7 +242,7 @@ class StyleALAE(ALAE):
 class FC_ALAE(ALAE):
     def __init__(self, z_dim, w_dim, image_dim, hyper_parameters, device):
         super().__init__( z_dim, w_dim, image_dim, 'FC', hyper_parameters, device)
-        self.hp.update({"batch_size": 128, "epochs":100, 'mapping_layers':8})
+        self.hp.update(FC_ALAE_DEFAULT)
         self.hp.update(hyper_parameters)
 
     def generate(self, z_vectors, **ae_kwargs):

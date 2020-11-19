@@ -14,9 +14,6 @@ from tqdm import tqdm
 
 
 MNIST_WORKING_DIM=28
-LFW_WORKING_DIM=64
-CELEB_A_WORKING_DIM=64
-FFHQ_WORKING_DIM=64
 VAL_SET_PORTION=0.05
 
 
@@ -122,15 +119,15 @@ def download_ffhq_thumbnails(data_dir):
     print("Done.")
 
 
-def get_lfw(data_dir):
+def get_lfw(data_dir, dim):
     """
     Returns an LFW train and val datalsets
     """
     download_lwf(data_dir)
-    pt_name = f"LFW-{LFW_WORKING_DIM}x{LFW_WORKING_DIM}.pt"
+    pt_name = f"LFW-{dim}x{dim}.pt"
     if not os.path.exists(os.path.join(data_dir, pt_name)):
         imgs = []
-        img_loader = ImgLoader(center_crop_size=150, resize=LFW_WORKING_DIM, normalize=True, to_torch=False, dtype=np.float32)
+        img_loader = ImgLoader(center_crop_size=150, resize=dim, normalize=True, to_torch=False, dtype=np.float32)
         for celeb_name in os.listdir(os.path.join(data_dir, 'lfw-deepfunneled')):
             for fname in os.listdir(os.path.join(data_dir, 'lfw-deepfunneled', celeb_name)):
                 img = img_loader(os.path.join(data_dir, 'lfw-deepfunneled', celeb_name, fname))
@@ -144,7 +141,7 @@ def get_lfw(data_dir):
     val_size = int(len(dataset) * VAL_SET_PORTION)
     train_dataset, val_dataset = random_split(dataset, [len(dataset) - val_size, val_size], generator=torch.Generator().manual_seed(42))
 
-    return train_dataset, val_dataset, LFW_WORKING_DIM
+    return train_dataset, val_dataset
 
 
 def get_mnist(data_dir):
@@ -159,27 +156,27 @@ def get_mnist(data_dir):
     return train_dataset, val_dataset, MNIST_WORKING_DIM
 
 
-def get_celeba(data_dir):
+def get_celeba(data_dir, dim):
     imgs_dir = os.path.join(data_dir, 'img_align_celeba', 'img_align_celeba')
     if not os.path.exists(imgs_dir):
         download_celeba(data_dir)
-    img_loader = ImgLoader(center_crop_size=170, resize=CELEB_A_WORKING_DIM, normalize=True, to_torch=True, dtype=torch.float32)
+    img_loader = ImgLoader(center_crop_size=170, resize=dim, normalize=True, to_torch=True, dtype=torch.float32)
     img_paths = [os.path.join(imgs_dir, fname) for fname in os.listdir(imgs_dir)]
     dataset = DiskDataset(img_paths, img_loader)
     val_size = int(len(dataset) * VAL_SET_PORTION)
     train_dataset, val_dataset = random_split(dataset, [len(dataset) - val_size, val_size], generator=torch.Generator().manual_seed(42))
 
-    return train_dataset, val_dataset, CELEB_A_WORKING_DIM
+    return train_dataset, val_dataset
 
-def get_ffhq(data_dir):
+def get_ffhq(data_dir, dim):
     imgs_dir = os.path.join(data_dir, 'thumbnails128x128')
     if not os.path.exists(imgs_dir):
         download_ffhq_thumbnails(data_dir)
 
-    pt_file = f"FFGQ_Thumbnail-{FFHQ_WORKING_DIM}x{FFHQ_WORKING_DIM}.pt"
+    pt_file = f"FFGQ_Thumbnail-{dim}x{dim}.pt"
     if not os.path.exists(os.path.join(data_dir, pt_file)):
         imgs = []
-        img_loader = ImgLoader(center_crop_size=None, resize=FFHQ_WORKING_DIM, normalize=True, to_torch=False, dtype=np.float32)
+        img_loader = ImgLoader(center_crop_size=None, resize=dim, normalize=True, to_torch=False, dtype=np.float32)
         for img_name in tqdm(os.listdir(imgs_dir)):
             fname = os.path.join(imgs_dir, img_name)
             img = img_loader(fname)
@@ -192,7 +189,7 @@ def get_ffhq(data_dir):
     val_size = int(len(dataset) * VAL_SET_PORTION)
     train_dataset, val_dataset = random_split(dataset, [len(dataset) - val_size, val_size], generator=torch.Generator().manual_seed(42))
 
-    return train_dataset, val_dataset, FFHQ_WORKING_DIM
+    return train_dataset, val_dataset
 
 class MemoryDataset(Dataset):
     def __init__(self, data_matrix):
@@ -239,20 +236,20 @@ class EndlessDataloader:
         return real_image
 
 
-def get_dataset(data_root, dataset_name):
+def get_dataset(data_root, dataset_name, dim):
     if dataset_name.lower() == 'mnist':
-        train_dataset, test_dataset, img_dim = get_mnist(os.path.join(data_root, 'Mnist'))
+        train_dataset, test_dataset = get_mnist(os.path.join(data_root, 'Mnist'))
     elif dataset_name.lower() == 'celeb-a':
-        train_dataset, test_dataset, img_dim = get_celeba(os.path.join(data_root, 'Celeb-a'))
+        train_dataset, test_dataset = get_celeba(os.path.join(data_root, 'Celeb-a'), dim)
     elif dataset_name.lower() == 'ffhq':
-        train_dataset, test_dataset, img_dim = get_ffhq(os.path.join(data_root, 'FFHQ-thumbnails'))
+        train_dataset, test_dataset = get_ffhq(os.path.join(data_root, 'FFHQ-thumbnails'), dim)
     elif dataset_name.lower() == 'lfw':
-        train_dataset, test_dataset, img_dim = get_lfw(os.path.join(data_root, 'LFW'))
+        train_dataset, test_dataset = get_lfw(os.path.join(data_root, 'LFW'), dim)
 
     else:
         raise ValueError("No such available dataset")
 
-    return train_dataset, test_dataset, img_dim
+    return train_dataset, test_dataset
 
 
 class RequireGradCollator(object):
@@ -278,9 +275,3 @@ def get_dataloader(dataset, batch_size, resize, device):
                        'pin_memory': True})
     return torch.utils.data.DataLoader(dataset, **kwargs)
 
-
-if __name__ == '__main__':
-    train_dataset, val_dataset, mid = get_celeba('/home/ariel/projects/LabProject-ALAE/data/Celeb-a')
-    x = 1
-    # get_mnist("../data/LFW")
-    # get_lfw("../data/LFW")
