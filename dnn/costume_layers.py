@@ -5,6 +5,9 @@ from torch.nn.parameter import Parameter
 import numpy as np
 from torch.nn import init
 
+STARTING_DIM = 4
+STARTING_CHANNELS = 512
+
 
 def upscale_2d(x):
     return nn.functional.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)
@@ -14,6 +17,15 @@ def downscale_2d(x):
     # since the factor is same for height and width the bilinear downsampling is just like an avg pool
     return F.avg_pool2d(x, 2, 2)  # downscales in factor 2
 
+
+def compute_r1_gradient_penalty(d_result_real, real_images):
+    real_grads = torch.autograd.grad(d_result_real.sum(), real_images, create_graph=True, retain_graph=True)[0]
+    # real_grads = torch.autograd.grad(d_result_real, real_images,
+    #                                  grad_outputs=torch.ones_like(d_result_real),
+    #                                  create_graph=True, retain_graph=True)[0]
+    r1_penalty = 0.5 * torch.sum(real_grads.pow(2.0), dim=[1, 2, 3]) # Norm on all dims but batch
+
+    return r1_penalty
 
 class StyleInstanceNorm2d(nn.Module):
     def __init__(self, channels):
@@ -30,6 +42,7 @@ class StyleInstanceNorm2d(nn.Module):
         x = self.instance_norm(x)
 
         return x, style
+
 
 class LearnablePreScaleBlur(nn.Module):
     """

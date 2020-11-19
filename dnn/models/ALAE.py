@@ -1,11 +1,13 @@
-from models.common_modules import *
-from utils.custom_adam import LREQAdam
+import os
 from tqdm import tqdm
 from torchvision.utils import save_image
-import os
+from dnn.models.modules.AlaeModules import *
+from dnn.models.modules.StyleGanGenerator import StylleGanGenerator, MappingFromLatent
+from dnn.custom_adam import LREQAdam
 from utils.tracker import LossTracker
-from utils.loss_utils import compute_r1_gradient_penalty
+from dnn.costume_layers import compute_r1_gradient_penalty
 from datasets import get_dataloader, EndlessDataloader
+
 COMMON_DEFAULT = {"lr":0.001, "g_penalty_coeff": 10, 'descriminator_layers':3}
 STYLE_ALE_DEFAULT = {
             'mapping_layers':8,
@@ -21,7 +23,11 @@ STYLE_ALE_DEFAULT = {
                    }
 FC_ALAE_DEFAULT = {"batch_size": 128, "epochs":100, 'mapping_layers':6}
 
+
 class ALAE:
+    """
+    A generic Implementation of https://arxiv.org/abs/2004.04467
+    """
     def __init__(self, z_dim, w_dim, image_dim, architecture_mode, hyper_parameters, device):
         self.device = device
         self.z_dim = z_dim
@@ -39,12 +45,16 @@ class ALAE:
             progression = list(zip(self.hp['resolutions'], self.hp['channels']))
             self.G = StylleGanGenerator(latent_dim=w_dim, progression=progression).to(device).train()
             self.E = AlaeEncoder(latent_dim=w_dim, progression=progression).to(device).train()
+
         self.F = MappingFromLatent(input_dim=z_dim, out_dim=w_dim, num_layers=self.hp['mapping_layers']).to(device).train()
         self.D = DiscriminatorFC(input_dim=w_dim, num_layers=self.hp['descriminator_layers']).to(device).train()
 
         self.ED_optimizer = LREQAdam(list(self.E.parameters()) + list(self.D.parameters()), lr=self.hp['lr'], betas=(0.0, 0.99), weight_decay=0)
         self.FG_optimizer = LREQAdam(list(self.F.parameters()) + list(self.G.parameters()), lr=self.hp['lr'], betas=(0.0, 0.99), weight_decay=0)
         # self.EG_optimizer = LREQAdam(list(self.E.parameters()) + list(self.G.parameters()), lr=self.hp['lr'], betas=(0.0, 0.99), weight_decay=0)
+
+    def __str__(self):
+        return f"F\n{self.F}\nG\n{self.G}\nE\n{self.E}\nD\n{self.D}\n"
 
     def get_ED_loss(self, batch_real_data, **ae_kwargs):
         """
@@ -130,6 +140,9 @@ class ALAE:
         raise NotImplementedError
 
     def save_sample(self, dump_path, samples_z, samples, **ae_kwargs):
+        """
+        Create debug image of images and their reconstruction alongside images generated from random noise
+        """
         os.makedirs(os.path.dirname(dump_path), exist_ok=True)
         with torch.no_grad():
             restored_image = self.decode(self.encode(samples, **ae_kwargs), **ae_kwargs)
@@ -145,6 +158,10 @@ class ALAE:
             save_image(resultsample, dump_path, nrow=len(samples))
 
 class StyleALAE(ALAE):
+    """
+    Implements the Style version of ALAE. Use the StyleGenerator (including the mapping from latent) for StyleGan
+    and use a Style-Encoder depicted in the paper.
+    """
     def __init__(self, z_dim, w_dim, image_dim, hyper_parameters, device):
         super().__init__( z_dim, w_dim, image_dim, 'cnn', hyper_parameters, device)
         self.res_idx = 0
@@ -240,6 +257,9 @@ class StyleALAE(ALAE):
 
 
 class FC_ALAE(ALAE):
+    """
+    Implements the FC version of ALAE. all submodules here are composed of FC layers
+    """
     def __init__(self, z_dim, w_dim, image_dim, hyper_parameters, device):
         super().__init__( z_dim, w_dim, image_dim, 'FC', hyper_parameters, device)
         self.hp.update(FC_ALAE_DEFAULT)

@@ -126,9 +126,10 @@ def get_lfw(data_dir, dim):
     download_lwf(data_dir)
     pt_name = f"LFW-{dim}x{dim}.pt"
     if not os.path.exists(os.path.join(data_dir, pt_name)):
+        print("Preprocessing FFHQ data")
         imgs = []
         img_loader = ImgLoader(center_crop_size=150, resize=dim, normalize=True, to_torch=False, dtype=np.float32)
-        for celeb_name in os.listdir(os.path.join(data_dir, 'lfw-deepfunneled')):
+        for celeb_name in tqdm(os.listdir(os.path.join(data_dir, 'lfw-deepfunneled'))):
             for fname in os.listdir(os.path.join(data_dir, 'lfw-deepfunneled', celeb_name)):
                 img = img_loader(os.path.join(data_dir, 'lfw-deepfunneled', celeb_name, fname))
                 imgs.append(torch.tensor(img, dtype=torch.float32))
@@ -175,6 +176,7 @@ def get_ffhq(data_dir, dim):
 
     pt_file = f"FFGQ_Thumbnail-{dim}x{dim}.pt"
     if not os.path.exists(os.path.join(data_dir, pt_file)):
+        print("Preprocessing FFHQ data")
         imgs = []
         img_loader = ImgLoader(center_crop_size=None, resize=dim, normalize=True, to_torch=False, dtype=np.float32)
         for img_name in tqdm(os.listdir(imgs_dir)):

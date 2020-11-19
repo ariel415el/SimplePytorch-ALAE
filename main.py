@@ -1,6 +1,6 @@
-from datasets import get_dataset, get_dataloader
-from models.StyleGan import StyleGan
-from models.ALAE import *
+from datasets import get_dataset
+from dnn.models.StyleGan import StyleGan
+from dnn.models.ALAE import *
 from pathlib import Path
 
 OUTPUT_DIR = 'Training_dir-test'
@@ -9,13 +9,20 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def find_latest_checkpoint(ckpt_dir):
+    """
+    Finds the latest created .pt file in the directory
+    """
     if not os.path.exists(ckpt_dir):
         return "None"
     oldest_to_newest_paths = sorted(Path(ckpt_dir).iterdir(), key=os.path.getmtime)
     return [x._str for x in oldest_to_newest_paths if x._str.endswith("pt")][0]
 
 
+###### Experiment 1: FC-ALAE on Mnist ######
 def train_ALAE_mnist(output_dir):
+    """
+    Load the mnist dataset in a flatten mode and train a FC mode ALAE on it
+    """
     LATENT_SPACE_SIZE= 50
     EPOCHS = 100
     hp = {'lr': 0.002, "batch_size": 128, 'mapping_layers':6, 'epochs':EPOCHS}
@@ -31,20 +38,22 @@ def train_ALAE_mnist(output_dir):
     model.train(train_dataset, (test_samples_z, test_samples), output_dir)
 
 
+###### Experiment 2: StyleGan as baseline ######
 def train_StyleGan_lfw(output_dir):
-
     # Create datasets
     LATENT_SPACE_SIZE = 512
-    train_dataset, test_dataset, img_dim = get_dataset("data", 'lfw')
+    img_dim = 64
+    train_dataset, test_dataset = get_dataset("data", 'lfw', img_dim)
 
     # Create model
-    model = StyleGan(z_dim=LATENT_SPACE_SIZE, w_dim=LATENT_SPACE_SIZE, image_dim=img_dim, hyper_parameters={},device=device)
+    model = StyleGan(z_dim=LATENT_SPACE_SIZE, w_dim=LATENT_SPACE_SIZE, hyper_parameters={},device=device)
 
     test_samples_z = torch.randn(NUMED_BUG_IMAGES, LATENT_SPACE_SIZE, dtype=torch.float32).to(device)
 
     model.train(train_dataset, test_samples_z, output_dir)
 
 
+###### Experiment 3: train StyleALAE to generate faces ######
 def train_StyleALAE_on_faces(output_dir, dataset_name):
     # Create datasets
     output_dir  = os.path.join(output_dir, f"StyleALAE-{dataset_name}")
@@ -69,6 +78,7 @@ def train_StyleALAE_on_faces(output_dir, dataset_name):
     # Create model
     model = StyleALAE(z_dim=LATENT_SPACE_SIZE, w_dim=LATENT_SPACE_SIZE, image_dim=dim, hyper_parameters=hp, device=device)
     model.load_train_state(find_latest_checkpoint(os.path.join(output_dir, 'checkpoints')))
+    print(model)
 
     test_dataloader = get_dataloader(test_dataset, batch_size=NUMED_BUG_IMAGES, resize=None, device=device)
     test_samples_z = torch.randn(NUMED_BUG_IMAGES, LATENT_SPACE_SIZE, dtype=torch.float32).to(device)
