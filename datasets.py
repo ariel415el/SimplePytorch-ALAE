@@ -103,7 +103,7 @@ def download_lwf(data_dir):
 
 
 def download_celeba(data_dir):
-    print("Downloadint Celeb-a from kaggle...")
+    print("Downloading Celeb-a from kaggle...")
     os.environ['KAGGLE_USERNAME'] = "ariel415el"
     os.environ['KAGGLE_KEY'] = "831db7b1693cd81d31ce16e340ddba03"
     import kaggle
@@ -240,7 +240,8 @@ class EndlessDataloader:
 
 def get_dataset(data_root, dataset_name, dim):
     if dataset_name.lower() == 'mnist':
-        train_dataset, test_dataset = get_mnist(os.path.join(data_root, 'Mnist'))
+        assert dim == 28
+        train_dataset, test_dataset, _ = get_mnist(os.path.join(data_root, 'Mnist'))
     elif dataset_name.lower() == 'celeb-a':
         train_dataset, test_dataset = get_celeba(os.path.join(data_root, 'Celeb-a'), dim)
     elif dataset_name.lower() == 'ffhq':

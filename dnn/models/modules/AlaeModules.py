@@ -5,12 +5,12 @@ All the modules here are modules devised in https://arxiv.org/abs/2004.04467
 """
 
 
-class DiscriminatorFC(nn.Module):
+class DiscriminatorMLP(nn.Module):
     """
-    An n FC layers discriminator  with leaky Relu. See
+    An n MLP layers discriminator  with leaky Relu. See
     """
     def __init__(self, num_layers, input_dim=256):
-        super(DiscriminatorFC, self).__init__()
+        super(DiscriminatorMLP, self).__init__()
         assert num_layers >= 2
         layers = []
         for i in range(num_layers):
@@ -24,12 +24,12 @@ class DiscriminatorFC(nn.Module):
         return x
 
 
-class EncoderFC(nn.Module):
+class EncoderMLP(nn.Module):
     """
-    The FC version of ALAE encoder
+    The MLP version of ALAE encoder
     """
     def __init__(self, input_img_dim, latent_dim):
-        super(EncoderFC, self).__init__()
+        super(EncoderMLP, self).__init__()
         self.out_dim = latent_dim
         self.input_img_dim = input_img_dim
 
@@ -53,12 +53,12 @@ class EncoderFC(nn.Module):
         return self.encode(x)
 
 
-class GeneratorFC(nn.Module):
+class GeneratorMLP(nn.Module):
     """
-    FC version of ALAE generator.
+    MLP version of ALAE generator.
     """
     def __init__(self, latent_dim, output_img_dim):
-        super(GeneratorFC, self).__init__()
+        super(GeneratorMLP, self).__init__()
         self.latent_size = latent_dim
         self.output_img_dim = output_img_dim
 
