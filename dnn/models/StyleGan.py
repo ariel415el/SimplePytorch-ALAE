@@ -3,7 +3,7 @@ from tqdm import tqdm
 import torch
 import torch.nn.functional as F
 from torchvision.utils import save_image
-
+import numpy as np
 from dnn.models.modules.StyleGanGenerator import StylleGanGenerator, MappingFromLatent
 from dnn.models.modules.PGGanDiscriminator import PGGanDiscriminator
 from dnn.custom_adam import LREQAdam
@@ -12,12 +12,13 @@ from dnn.costume_layers import compute_r1_gradient_penalty
 from datasets import get_dataloader, EndlessDataloader
 
 
-RESOLUTIONS = [4, 8, 16, 32, 64]
-CHANNELS = [256, 128, 64, 32, 15]
-LEARNING_RATES = [0.001, 0.001, 0.001, 0.001, 0.001, ]
-PHASE_LENGTHS = [400_000, 600_000, 800_000, 1_000_000, 2_000_000]
-# PHASE_LENGTHS = [128, 128, 128, 128, 128]
-BATCH_SIZES = [128, 128, 128, 128, 128]
+RESOLUTIONS = [4, 8, 16, 32, 64, 64, 64]
+CHANNELS = [512, 512, 256, 128, 64, 32, 16]
+LEARNING_RATES = [0.001, 0.0015, 0.002, 0.0025, 0.003, 0.003, 0.003]
+PHASE_LENGTHS = [200_000, 400_000, 600_000, 800_000, 1000_000, 1000_000, 1000_000]
+BATCH_SIZES = [512, 256, 128, 64, 64, 64, 64]
+# PHASE_LENGTHS = [8, 8, 8, 8, 8, 8, 8]
+# BATCH_SIZES = [8, 8, 8, 8, 8, 8, 8]
 N_CRITIC=1
 
 
@@ -30,7 +31,7 @@ class StyleGan:
     def __init__(self, z_dim, w_dim, hyper_parameters, device):
         self.device = device
         self.z_dim = z_dim
-        self.hp = {'lr': 0.002, 'g_penalty_coeff':10.0, 'dump_imgs_freq': 500}
+        self.hp = {'lr': 0.002, 'g_penalty_coeff':10.0, 'dump_imgs_freq': 1000}
         self.hp.update(hyper_parameters)
 
         self.F = MappingFromLatent(num_layers=8, input_dim=z_dim, out_dim=w_dim).to(device).train()
@@ -38,7 +39,7 @@ class StyleGan:
         progression = list(zip(RESOLUTIONS, CHANNELS))
         self.G = StylleGanGenerator(latent_dim=w_dim, progression=progression).to(device).train()
 
-        self.D = PGGanDiscriminator().to(device).train()
+        self.D = PGGanDiscriminator(progression=progression).to(device).train()
 
         self.G_optimizer = LREQAdam(list(self.F.parameters()) + list(self.G.parameters()), lr=self.hp['lr'], betas=(0.0, 0.99), weight_decay=0)
         self.D_optimizer = LREQAdam(self.D.parameters(), lr=self.hp['lr'], betas=(0.0, 0.99), weight_decay=0)

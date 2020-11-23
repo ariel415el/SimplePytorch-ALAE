@@ -178,11 +178,11 @@ def get_ffhq(data_dir, dim):
     if not os.path.exists(os.path.join(data_dir, pt_file)):
         print("Preprocessing FFHQ data")
         imgs = []
-        img_loader = ImgLoader(center_crop_size=None, resize=dim, normalize=True, to_torch=False, dtype=np.float32)
+        img_loader = ImgLoader(center_crop_size=None, resize=dim, normalize=True, to_torch=True, dtype=torch.float32)
         for img_name in tqdm(os.listdir(imgs_dir)):
             fname = os.path.join(imgs_dir, img_name)
             img = img_loader(fname)
-            imgs.append(torch.tensor(img, dtype=torch.float32))
+            imgs.append(img)
         with open(os.path.join(data_dir, pt_file), 'wb') as f:
             torch.save(torch.stack(imgs), f)
 
