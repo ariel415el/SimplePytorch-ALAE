@@ -20,7 +20,8 @@ device = torch.device("cuda:0" if torch.cuda.is_available() and args.device == "
 config = {
     "z_dim": 512,
     "w_dim": 512,
-    "image_dim": 32,
+    "image_dim": 64,
+    "mapping_layers": 8,
     "resolutions": [4, 8, 16, 32, 64, 64, 64],
     "channels": [256, 256, 128, 128, 64, 32, 16],
     "learning_rates": [0.001, 0.0015, 0.002, 0.0025, 0.003, 0.003, 0.003],

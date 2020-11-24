@@ -1,12 +1,13 @@
 import torch
 from datasets import get_dataset
 from dnn.models.StyleGan import StyleGan
+from utils.common_utils import get_config_str
 import argparse
 import os
 from pprint import pprint
 
 parser = argparse.ArgumentParser(description='Train arguments')
-parser.add_argument("--output_dir", type=str, default="Training_dir-test")
+parser.add_argument("--output_root", type=str, default="Training_dir-test")
 parser.add_argument("--dataset_name", type=str, default="LFW", help='FFHQ/CelebA/LFW')
 parser.add_argument("--num_debug_images", type=int, default=36)
 parser.add_argument("--print_model", action='store_true', default=False)
@@ -34,6 +35,7 @@ config = {
 
 if __name__ == '__main__':
     # Create datasets
+
     train_dataset, test_dataset = get_dataset("data", args.dataset_name, config['image_dim'])
 
     # Create model
@@ -48,6 +50,7 @@ if __name__ == '__main__':
 
     test_samples_z = torch.randn(args.num_debug_images, config['z_dim'], dtype=torch.float32).to(device)
 
-    output_dir = os.path.join(args.output_dir, f"StyleGan-{args.dataset_name}")
+    config_descriptor = get_config_str(config)
+    output_dir = os.path.join(args.output_root, f"StyleGan-{config_descriptor}")
     os.makedirs(os.path.join(output_dir, 'images'), exist_ok=True)
     model.train(train_dataset, test_samples_z, output_dir)

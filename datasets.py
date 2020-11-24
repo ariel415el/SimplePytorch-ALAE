@@ -174,7 +174,7 @@ def get_ffhq(data_dir, dim):
     if not os.path.exists(imgs_dir):
         download_ffhq_thumbnails(data_dir)
 
-    pt_file = f"FFGQ_Thumbnail-{dim}x{dim}.pt"
+    pt_file = f"FFHQ_Thumbnail-{dim}x{dim}.pt"
     if not os.path.exists(os.path.join(data_dir, pt_file)):
         print("Preprocessing FFHQ data")
         imgs = []
