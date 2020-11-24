@@ -148,7 +148,6 @@ class StyleALAE(ALAE):
     def __init__(self, model_config, device):
         super().__init__(model_config, 'cnn', device)
         self.res_idx = 0
-        self.cfg.update(STYLE_ALE_DEFAULT)
         self.cfg.update(model_config)
         self.train_step = 0
 
@@ -247,7 +246,6 @@ class MLP_ALAE(ALAE):
     """
     def __init__(self, model_config, device):
         super().__init__(model_config, 'MLP', device)
-        self.cfg.update(MLP_ALAE_DEFAULT)
         self.cfg.update(model_config)
 
     def generate(self, z_vectors, **ae_kwargs):
@@ -257,7 +255,7 @@ class MLP_ALAE(ALAE):
         return self.E(img)
 
     def decode(self, latent_vectors, **ae_kwargs):
-        return self.D(latent_vectors)
+        return self.G(latent_vectors)
 
     def train(self, train_dataset, test_data, output_dir):
         train_dataloader = get_dataloader(train_dataset, self.cfg['batch_size'], resize=None, device=self.device)
@@ -268,6 +266,6 @@ class MLP_ALAE(ALAE):
 
             tracker.register_means(epoch)
             tracker.plot()
-            dump_path = os.path.join(output_dir, f"epoch-{epoch}.jpg")
+            dump_path = os.path.join(output_dir, 'images', f"epoch-{epoch}.jpg")
             self.save_sample(dump_path, test_data[0], test_data[1])
 

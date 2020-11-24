@@ -1,4 +1,4 @@
 .idea*
 __pycache*
-Training_dir/
+Training_dir*/
 data/

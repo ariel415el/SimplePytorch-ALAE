@@ -2,12 +2,12 @@ import os
 import torch
 from datasets import get_dataset, get_dataloader
 from dnn.models.ALAE import StyleALAE
-from utils.common_utils import find_latest_checkpoint
+from utils.common_utils import find_latest_checkpoint, get_config_str
 import argparse
 from pprint import pprint
 
 parser = argparse.ArgumentParser(description='Train arguments')
-parser.add_argument("--output_dir", type=str, default="Training_dir-test")
+parser.add_argument("--output_root", type=str, default="Training_dir-test")
 parser.add_argument("--dataset_name", type=str, default="FFHQ", help='FFHQ/CelebA/LFW')
 parser.add_argument("--num_debug_images", type=int, default=32)
 parser.add_argument("--print_model", action='store_true', default=False)
@@ -21,27 +21,26 @@ config = {
     "z_dim": 512,
     "w_dim": 512,
     "image_dim": 32,
-    # "resolutions": [4, 8, 16, 32, 64, 64, 64],
-    "resolutions": [4, 8, 16, 32, 32, 32, 32],
+    "resolutions": [4, 8, 16, 32, 64, 64, 64],
     "channels": [256, 256, 128, 128, 64, 32, 16],
     "learning_rates": [0.001, 0.0015, 0.002, 0.0025, 0.003, 0.003, 0.003],
-    # "phase_lengths": [200_000, 400_000, 600_000, 800_000, 1000_000, 1000_000, 1000_000],
-    # "batch_sizes": [256, 256, 128, 64, 32, 32, 32],
-    "phase_lengths": [32]*7,
-    "batch_sizes": [32]*7,
+    "phase_lengths": [200_000, 400_000, 600_000, 800_000, 1000_000, 1000_000, 1000_000],
+    "batch_sizes": [256, 256, 128, 64, 32, 32, 32],
     "n_critic": 1,
     "dump_imgs_freq": 1000,
     "checkpoint_freq": 1
 }
 
 if __name__ == '__main__':
-    output_dir = os.path.join(args.output_dir, f"StyleALAE-{args.dataset_name}")
+    config_descriptor = get_config_str(config)
+
+    output_dir = os.path.join(args.output_root, f"StyleALAE-{config_descriptor}")
     os.makedirs(os.path.join(output_dir, 'checkpoints'), exist_ok=True)
     os.makedirs(os.path.join(output_dir, 'images'), exist_ok=True)
 
     cfg_file_path = os.path.join(output_dir, 'checkpoints', "cfg.pt_pkl")
     if os.path.exists(cfg_file_path):
-        print("Loading model config from file...")
+        print("Overriding model config from file...")
         config = torch.load(cfg_file_path)
     torch.save(config, cfg_file_path)
 

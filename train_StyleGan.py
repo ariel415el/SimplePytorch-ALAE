@@ -3,11 +3,14 @@ from datasets import get_dataset
 from dnn.models.StyleGan import StyleGan
 import argparse
 import os
+from pprint import pprint
 
 parser = argparse.ArgumentParser(description='Train arguments')
 parser.add_argument("--output_dir", type=str, default="Training_dir-test")
 parser.add_argument("--dataset_name", type=str, default="LFW", help='FFHQ/CelebA/LFW')
 parser.add_argument("--num_debug_images", type=int, default=36)
+parser.add_argument("--print_model", action='store_true', default=False)
+parser.add_argument("--print_config", action='store_true', default=False)
 parser.add_argument("--device", type=str, default="cuda:0", help="cuda:0/cpu")
 args = parser.parse_args()
 
@@ -35,6 +38,13 @@ if __name__ == '__main__':
 
     # Create model
     model = StyleGan(model_config=config, device=device)
+
+    if args.print_config:
+        print("Model config:")
+        pprint(config)
+
+    if args.print_model:
+        print(model)
 
     test_samples_z = torch.randn(args.num_debug_images, config['z_dim'], dtype=torch.float32).to(device)
 
