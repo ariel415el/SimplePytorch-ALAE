@@ -12,7 +12,7 @@ parser.add_argument("--dataset_name", type=str, default="FFHQ", help='FFHQ/Celeb
 parser.add_argument("--num_debug_images", type=int, default=32)
 parser.add_argument("--print_model", action='store_true', default=False)
 parser.add_argument("--print_config", action='store_true', default=False)
-parser.add_argument("--device", type=str, default="cpu", help="cuda:0/cpu")
+parser.add_argument("--device", type=str, default="cuda:0", help="cuda:0/cpu")
 args = parser.parse_args()
 
 device = torch.device("cuda:0" if torch.cuda.is_available() and args.device == "cuda:0" else "cpu")

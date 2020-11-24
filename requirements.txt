@@ -1,0 +1,7 @@
+imageio
+kaggle
+numpy
+opencv-python
+torch
+torchvision
+tqdm
