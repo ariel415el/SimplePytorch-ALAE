@@ -174,20 +174,25 @@ def get_ffhq(data_dir, dim):
     if not os.path.exists(imgs_dir):
         download_ffhq_thumbnails(data_dir)
 
-    pt_file = f"FFHQ_Thumbnail-{dim}x{dim}.pt"
-    if not os.path.exists(os.path.join(data_dir, pt_file)):
-        print("Preprocessing FFHQ data")
-        imgs = []
-        img_loader = ImgLoader(center_crop_size=None, resize=dim, normalize=True, to_torch=True, dtype=torch.float32)
-        for img_name in tqdm(os.listdir(imgs_dir)):
-            fname = os.path.join(imgs_dir, img_name)
-            img = img_loader(fname)
-            imgs.append(img)
-        with open(os.path.join(data_dir, pt_file), 'wb') as f:
-            torch.save(torch.stack(imgs), f)
+    if dim <= 64:
+        pt_file = f"FFHQ_Thumbnail-{dim}x{dim}.pt"
+        if not os.path.exists(os.path.join(data_dir, pt_file)):
+            print(f"Preprocessing FFHQ: creating a {dim}x{dim}  version of all data")
+            imgs = []
+            img_loader = ImgLoader(center_crop_size=None, resize=dim, normalize=True, to_torch=True, dtype=torch.float32)
+            for img_name in tqdm(os.listdir(imgs_dir)):
+                fname = os.path.join(imgs_dir, img_name)
+                img = img_loader(fname)
+                imgs.append(img)
+            with open(os.path.join(data_dir, pt_file), 'wb') as f:
+                torch.save(torch.stack(imgs), f)
 
-    data = torch.load(os.path.join(data_dir, pt_file))
-    dataset = MemoryDataset(data)
+        data = torch.load(os.path.join(data_dir, pt_file))
+        dataset = MemoryDataset(data)
+    else:
+        img_loader = ImgLoader(center_crop_size=None, resize=dim, normalize=True, to_torch=True, dtype=torch.float32)
+        img_paths = [os.path.join(imgs_dir, img_name) for img_name in os.listdir(imgs_dir)]
+        dataset = DiskDataset(img_paths, img_loader)
     val_size = int(len(dataset) * VAL_SET_PORTION)
     train_dataset, val_dataset = random_split(dataset, [len(dataset) - val_size, val_size], generator=torch.Generator().manual_seed(42))
 
