@@ -28,8 +28,8 @@ config = {
     "phase_lengths": [200_000, 400_000, 600_000, 800_000, 1000_000, 1000_000, 1000_000],
     "batch_sizes": [256, 256, 128, 64, 32, 32, 32],
     "n_critic": 1,
-    "dump_imgs_freq": 1000,
-    "checkpoint_freq": 1
+    "dump_imgs_freq": 5000,
+    "checkpoint_freq": 10000
 }
 
 if __name__ == '__main__':

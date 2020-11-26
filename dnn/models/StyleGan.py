@@ -55,6 +55,16 @@ class StyleGan:
         loss = F.softplus(-fake_images_dicriminator_outputs).mean()
         return loss
 
+    def save_train_state(self, save_path):
+        torch.save(
+            {
+                'F': self.F.state_dict(),
+                'G': self.G.state_dict(),
+                'D': self.D.state_dict(),
+            },
+            save_path
+        )
+
     def set_optimizers_lr(self, new_lr):
         for optimizer in [self.D_optimizer, self.G_optimizer]:
             for group in optimizer.param_groups:
@@ -68,7 +78,7 @@ class StyleGan:
             batchs_in_phase = self.cfg['phase_lengths'][res_idx] // self.cfg['batch_sizes'][res_idx]
             dataloader = EndlessDataloader(get_dataloader(train_dataset, self.cfg['batch_sizes'][res_idx], resize=res, device=self.device))
             progress_bar = tqdm(range(batchs_in_phase * 2))
-            for i in  progress_bar:
+            for i in progress_bar:
                 alpha = min(1.0, i / batchs_in_phase)  # < 1 in the first half and 1 in the second
                 progress_bar.set_description(f"gs-{global_steps}_res-{res_idx}={res}x{res}_alpha-{alpha:.3f}")
                 batch_real_data = dataloader.next()
@@ -88,9 +98,9 @@ class StyleGan:
                     self.G_optimizer.step()
                     tracker.update(dict(loss_g=loss_g))
                 global_steps += 1
-
                 if global_steps % self.cfg['dump_imgs_freq'] == 0:
                     self.save_sample(global_steps, tracker, test_data, output_dir, res_idx, alpha)
+            self.save_train_state(os.path.join(output_dir, 'checkpoints', f"ckpt_res-{res_idx}={res}x{res}-end.pt"))
 
     def save_sample(self, gs, tracker, samples_z, output_dir, res_idx, alpha):
         with torch.no_grad():

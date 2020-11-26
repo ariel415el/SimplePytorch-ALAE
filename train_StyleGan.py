@@ -23,7 +23,6 @@ config = {
     'image_dim':64,
     'lr': 0.002,
     'g_penalty_coeff':10.0,
-    'dump_imgs_freq': 1000,
     'mapping_layers':8,
     "resolutions": [4, 8, 16, 32, 64],
     "channels": [256, 256, 128, 64, 32],
@@ -31,6 +30,7 @@ config = {
     "phase_lengths": [400_000, 600_000, 800_000, 1_000_000, 2_000_000],
     "batch_sizes": [128, 128, 128, 128, 128],
     "n_critic": 1,
+    "dump_imgs_freq": 5000
 }
 
 if __name__ == '__main__':
@@ -52,5 +52,6 @@ if __name__ == '__main__':
 
     config_descriptor = get_config_str(config)
     output_dir = os.path.join(args.output_root, f"StyleGan-{config_descriptor}")
+    os.makedirs(os.path.join(output_dir, 'checkpoints'), exist_ok=True)
     os.makedirs(os.path.join(output_dir, 'images'), exist_ok=True)
     model.train(train_dataset, test_samples_z, output_dir)
