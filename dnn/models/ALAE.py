@@ -194,7 +194,7 @@ class StyleALAE(ALAE):
                 self.perform_train_step(batch_real_data, tracker, final_resolution_idx=self.res_idx, alpha=alpha)
 
                 self.train_step += 1
-                progress_tag = f"gs-{self.train_step}_res-{res}x{res}_alpha-{alpha:.2f}"
+                progress_tag = f"gs-{self.train_step}_res-{self.res_idx}={res}x{res}_alpha-{alpha:.2f}"
                 progress_bar.set_description(progress_tag)
 
                 if self.train_step % self.cfg['dump_imgs_freq'] == 0:

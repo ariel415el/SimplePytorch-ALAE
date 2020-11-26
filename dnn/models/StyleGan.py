@@ -70,7 +70,7 @@ class StyleGan:
             progress_bar = tqdm(range(batchs_in_phase * 2))
             for i in  progress_bar:
                 alpha = min(1.0, i / batchs_in_phase)  # < 1 in the first half and 1 in the second
-                progress_bar.set_description(f"gs-{global_steps}_res-{res}x{res}_alpha-{alpha:.3f}")
+                progress_bar.set_description(f"gs-{global_steps}_res-{res_idx}={res}x{res}_alpha-{alpha:.3f}")
                 batch_real_data = dataloader.next()
 
                 # train discriminator
