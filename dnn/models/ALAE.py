@@ -217,7 +217,7 @@ class StyleALAE(ALAE):
             self.D.load_state_dict(checkpoint['D'])
             self.ED_optimizer.load_state_dict(checkpoint['ED_optimizer'])
             self.FG_optimizer.load_state_dict(checkpoint['FG_optimizer'])
-            self.res_idx = checkpoint['last_completed_res_idx']
+            self.res_idx = checkpoint['last_uncompleted_res_idx']
             self.train_step = checkpoint['global_step']
             print(f"Checkpoint {os.path.basename(checkpoint_path)} loaded. Starting from resolution "
                   f"number {self.res_idx} and global_step {self.train_step}")
@@ -233,7 +233,7 @@ class StyleALAE(ALAE):
                 'D': self.D.state_dict(),
                 'ED_optimizer': self.ED_optimizer.state_dict(),
                 'FG_optimizer': self.FG_optimizer.state_dict(),
-                'last_completed_res_idx': self.res_idx,
+                'last_uncompleted_res_idx': self.res_idx,
                 'global_step': self.train_step,
             },
             save_path
