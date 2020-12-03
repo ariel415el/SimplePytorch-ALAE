@@ -140,7 +140,7 @@ def get_lfw(data_dir, dim):
 
     dataset = MemoryDataset(data)
     val_size = int(len(dataset) * VAL_SET_PORTION)
-    train_dataset, val_dataset = random_split(dataset, [len(dataset) - val_size, val_size], generator=torch.Generator().manual_seed(42))
+    train_dataset, val_dataset = random_split(dataset, [len(dataset) - val_size, val_size])
 
     return train_dataset, val_dataset
 
@@ -165,7 +165,7 @@ def get_celeba(data_dir, dim):
     img_paths = [os.path.join(imgs_dir, fname) for fname in os.listdir(imgs_dir)]
     dataset = DiskDataset(img_paths, img_loader)
     val_size = int(len(dataset) * VAL_SET_PORTION)
-    train_dataset, val_dataset = random_split(dataset, [len(dataset) - val_size, val_size], generator=torch.Generator().manual_seed(42))
+    train_dataset, val_dataset = random_split(dataset, [len(dataset) - val_size, val_size])
 
     return train_dataset, val_dataset
 
@@ -194,7 +194,7 @@ def get_ffhq(data_dir, dim):
         img_paths = [os.path.join(imgs_dir, img_name) for img_name in os.listdir(imgs_dir)]
         dataset = DiskDataset(img_paths, img_loader)
     val_size = int(len(dataset) * VAL_SET_PORTION)
-    train_dataset, val_dataset = random_split(dataset, [len(dataset) - val_size, val_size], generator=torch.Generator().manual_seed(42))
+    train_dataset, val_dataset = random_split(dataset, [len(dataset) - val_size, val_size])
 
     return train_dataset, val_dataset
 

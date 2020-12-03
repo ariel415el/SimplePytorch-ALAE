@@ -111,5 +111,5 @@ class StyleGan:
 
             tracker.register_means(gs)
             tracker.plot()
-            f = os.path.join(output_dir, f"gs-{gs}_res-{self.cfg['resolutions'][res_idx]}x{self.cfg['resolutions'][res_idx]}_alpha-{alpha:.3f}.jpg")
+            f = os.path.join(output_dir, 'images', f"gs-{gs}_res-{self.cfg['resolutions'][res_idx]}x{self.cfg['resolutions'][res_idx]}_alpha-{alpha:.3f}.jpg")
             save_image(generated_images, f, nrow=int(np.sqrt(len(samples_z))))

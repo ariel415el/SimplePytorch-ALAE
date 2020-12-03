@@ -13,19 +13,18 @@ COMMON_DEFAULT = {"start_lr": 0.001, "g_penalty_coeff": 10, 'descriminator_layer
 
 class ALAE:
     """
-    A generic Implementation of https://arxiv.org/abs/2004.04467
+    A generic (ASTRACT) Implementation of https://arxiv.org/abs/2004.04467
     """
     def __init__(self, model_config, architecture_mode, device):
         self.device = device
         self.cfg = COMMON_DEFAULT
+        self.cfg.update(model_config)
 
         if architecture_mode == "MLP":
-            self.cfg.update(model_config)
 
             self.G = GeneratorMLP(latent_dim=self.cfg['w_dim'], output_img_dim=self.cfg['image_dim']).to(device).train()
             self.E = EncoderMLP(input_img_dim=self.cfg['image_dim'], latent_dim=self.cfg['w_dim']).to(device).train()
         else:
-            self.cfg.update(model_config)
             progression = list(zip(self.cfg['resolutions'], self.cfg['channels']))
             self.G = StylleGanGenerator(latent_dim=self.cfg['w_dim'], progression=progression).to(device).train()
             self.E = AlaeEncoder(latent_dim=self.cfg['w_dim'], progression=progression).to(device).train()
@@ -34,7 +33,9 @@ class ALAE:
         self.D = DiscriminatorMLP(input_dim=self.cfg['w_dim'], num_layers=self.cfg['descriminator_layers']).to(device).train()
 
         self.ED_optimizer = LREQAdam(list(self.E.parameters()) + list(self.D.parameters()), lr=self.cfg['start_lr'], betas=(0.0, 0.99), weight_decay=0)
-        self.FG_optimizer = LREQAdam(list(self.F.parameters()) + list(self.G.parameters()), lr=self.cfg['start_lr'], betas=(0.0, 0.99), weight_decay=0)
+        self.FG_optimizer = LREQAdam([{'lr_mult': self.cfg['mapping_lr_factor'], 'params': self.F.parameters(), 'lr': self.cfg['start_lr']},
+                                      {'params': self.G.parameters(), 'lr': self.cfg['start_lr']}],
+                                     betas=(0.0, 0.99), weight_decay=0)
 
     def __str__(self):
         return f"F\n{self.F}\nG\n{self.G}\nE\n{self.E}\nD\n{self.D}\n"
@@ -148,13 +149,17 @@ class StyleALAE(ALAE):
     def __init__(self, model_config, device):
         super().__init__(model_config, 'cnn', device)
         self.res_idx = 0
-        self.cfg.update(model_config)
         self.train_step = 0
 
     def set_optimizers_lr(self, new_lr):
+        """
+        mapping layers is decreased here as described in the StyleGan paper:
+        "We thus reduce the learning rate by two orders of magnitude for the mapping network, i.e., λ = 0.01 ·λ"
+        """
         for optimizer in [self.ED_optimizer, self.FG_optimizer]:
             for group in optimizer.param_groups:
-                group['lr'] = new_lr
+                mult = group.get('lr_mult', 1)
+                group['lr'] = new_lr * mult
 
     def generate(self, z_vectors, **ae_kwargs):
         self.G.eval()
@@ -246,7 +251,6 @@ class MLP_ALAE(ALAE):
     """
     def __init__(self, model_config, device):
         super().__init__(model_config, 'MLP', device)
-        self.cfg.update(model_config)
 
     def generate(self, z_vectors, **ae_kwargs):
         return self.G(self.F(z_vectors))
