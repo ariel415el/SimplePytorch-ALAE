@@ -124,7 +124,7 @@ class AdaIn(nn.Module):
 
 
 class LREQ_FC_Layer_2(nn.Module):
-    def __init__(self, in_features, out_features, lrmul=1.0):
+    def __init__(self, in_features, out_features):
         super(LREQ_FC_Layer_2, self).__init__()
         self.in_features = in_features
         self.weight = Parameter(torch.Tensor(out_features, in_features))
@@ -147,7 +147,7 @@ class LREQ_FC_Layer(nn.Module):
     For more information see "PROGRESSIVE GROWING OF GANS FOR IMPROVED QUALITY, STABILITY,AND VARIATION"
 
     """
-    def __init__(self, in_features, out_features, bias=True, gain=np.sqrt(2.0), lrmul=1.0):
+    def __init__(self, in_features, out_features, bias=True):
         super(LREQ_FC_Layer, self).__init__()
         self.in_features = in_features
         self.weight = Parameter(torch.Tensor(out_features, in_features))
@@ -155,18 +155,12 @@ class LREQ_FC_Layer(nn.Module):
             self.bias = Parameter(torch.Tensor(out_features))
         else:
             self.register_parameter('bias', None)
-        self.std = 0
-        self.gain = gain
-        self.lrmul = lrmul
+        self.std = np.sqrt(2.0) / np.sqrt(self.in_features)
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.std = self.gain / np.sqrt(self.in_features) * self.lrmul
-
-        init.normal_(self.weight, mean=0, std=self.std / self.lrmul)
+        init.normal_(self.weight, mean=0, std=self.std)
         setattr(self.weight, 'lr_equalization_coef', self.std)
-        if self.bias is not None:
-            setattr(self.bias, 'lr_equalization_coef', self.lrmul)
 
         if self.bias is not None:
             with torch.no_grad():
@@ -177,7 +171,7 @@ class LREQ_FC_Layer(nn.Module):
 
 
 class Lreq_Conv2d(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, padding=1, stride=1, output_padding=0, dilation=1, bias=True, lrmul=1.0):
+    def __init__(self, in_channels, out_channels, kernel_size, padding=1, stride=1, output_padding=0, dilation=1, bias=True):
         super(Lreq_Conv2d, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -186,14 +180,13 @@ class Lreq_Conv2d(nn.Module):
         self.padding = (padding, padding)
         self.output_padding = (output_padding, output_padding)
         self.dilation = (dilation, dilation)
-        self.lrmul = lrmul
-        self.fan_in = np.prod(self.kernel_size) * in_channels
 
         self.weight = Parameter(torch.Tensor(out_channels, in_channels , *self.kernel_size))
         if bias:
             self.bias = Parameter(torch.Tensor(out_channels))
         else:
             self.register_parameter('bias', None)
+        self.fan_in = np.prod(self.kernel_size) * in_channels
         self.std = np.sqrt(2.0) / np.sqrt(self.fan_in)
         self.reset_parameters()
 
@@ -201,10 +194,8 @@ class Lreq_Conv2d(nn.Module):
         return f"LreqConv2d({self.in_channels}, {self.out_channels}, k={self.kernel_size[0]}, p={self.padding[0]})"
 
     def reset_parameters(self):
-        init.normal_(self.weight, mean=0, std=self.std / self.lrmul)
+        init.normal_(self.weight, mean=0, std=self.std)
         setattr(self.weight, 'lr_equalization_coef', self.std)
-        if self.bias is not None:
-            setattr(self.bias, 'lr_equalization_coef', self.lrmul)
 
         if self.bias is not None:
             with torch.no_grad():

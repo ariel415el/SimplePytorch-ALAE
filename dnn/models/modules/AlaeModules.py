@@ -15,7 +15,7 @@ class DiscriminatorMLP(nn.Module):
         layers = []
         for i in range(num_layers):
             out_dim = 1 if i == num_layers - 1 else input_dim
-            layers += [LREQ_FC_Layer(input_dim, out_dim, lrmul=0.1), nn.LeakyReLU(0.2)]
+            layers += [LREQ_FC_Layer(input_dim, out_dim), nn.LeakyReLU(0.2)]
         self.mapping = torch.nn.Sequential(*layers)
 
     def forward(self, x):

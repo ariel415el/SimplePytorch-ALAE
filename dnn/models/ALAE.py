@@ -8,7 +8,11 @@ from utils.tracker import LossTracker
 from dnn.costume_layers import compute_r1_gradient_penalty
 from datasets import get_dataloader, EndlessDataloader
 
-COMMON_DEFAULT = {"start_lr": 0.001, "g_penalty_coeff": 10, 'descriminator_layers': 3}
+COMMON_DEFAULT = {"g_penalty_coeff": 10,
+                  'descriminator_layers': 3,
+                  'mapping_lr_factor': 0.01, # StyleGan paper: "... reduce the learning rate by two orders of magnitude for the mapping network..."
+                  'discriminator_lr_factor':0.1 # Found in The ALAE official implemenation.
+                  }
 
 
 class ALAE:
@@ -32,13 +36,28 @@ class ALAE:
         self.F = MappingFromLatent(input_dim=self.cfg['z_dim'], out_dim=self.cfg['w_dim'], num_layers=self.cfg['mapping_layers']).to(device).train()
         self.D = DiscriminatorMLP(input_dim=self.cfg['w_dim'], num_layers=self.cfg['descriminator_layers']).to(device).train()
 
-        self.ED_optimizer = LREQAdam(list(self.E.parameters()) + list(self.D.parameters()), lr=self.cfg['start_lr'], betas=(0.0, 0.99), weight_decay=0)
-        self.FG_optimizer = LREQAdam([{'lr_mult': self.cfg['mapping_lr_factor'], 'params': self.F.parameters(), 'lr': self.cfg['start_lr']},
-                                      {'params': self.G.parameters(), 'lr': self.cfg['start_lr']}],
-                                     betas=(0.0, 0.99), weight_decay=0)
+        self.ED_optimizer = LREQAdam([{'params': self.D.parameters(), 'lr_mult': self.cfg['discriminator_lr_factor']},
+                                      {'params': self.E.parameters(),}],
+                                      betas=(0.0, 0.99), weight_decay=0)
+        self.FG_optimizer = LREQAdam([{'params': self.F.parameters(), 'lr_mult': self.cfg['mapping_lr_factor']},
+                                      {'params': self.G.parameters()}],
+                                      betas=(0.0, 0.99), weight_decay=0)
 
     def __str__(self):
         return f"F\n{self.F}\nG\n{self.G}\nE\n{self.E}\nD\n{self.D}\n"
+
+    def set_optimizers_lr(self, new_lr):
+        """
+        resets the learning rate of the optimizers.
+        lr_mult allows rescaling specifoic param groups.
+        The StyleGan paper describes the lr scale of theMapping layers:
+        "We thus reduce the learning rate by two orders of magnitude for the mapping network, i.e., λ = 0.01 ·λ"
+        The decrease of the Discriminator D is just a parameter found in the official implementation.
+        """
+        for optimizer in [self.ED_optimizer, self.FG_optimizer]:
+            for group in optimizer.param_groups:
+                mult = group.get('lr_mult', 1)
+                group['lr'] = new_lr * mult
 
     def get_ED_loss(self, batch_real_data, **ae_kwargs):
         """
@@ -151,16 +170,6 @@ class StyleALAE(ALAE):
         self.res_idx = 0
         self.train_step = 0
 
-    def set_optimizers_lr(self, new_lr):
-        """
-        mapping layers is decreased here as described in the StyleGan paper:
-        "We thus reduce the learning rate by two orders of magnitude for the mapping network, i.e., λ = 0.01 ·λ"
-        """
-        for optimizer in [self.ED_optimizer, self.FG_optimizer]:
-            for group in optimizer.param_groups:
-                mult = group.get('lr_mult', 1)
-                group['lr'] = new_lr * mult
-
     def generate(self, z_vectors, **ae_kwargs):
         self.G.eval()
         self.F.eval()
@@ -264,6 +273,7 @@ class MLP_ALAE(ALAE):
     def train(self, train_dataset, test_data, output_dir):
         train_dataloader = get_dataloader(train_dataset, self.cfg['batch_size'], resize=None, device=self.device)
         tracker = LossTracker(output_dir)
+        self.set_optimizers_lr(self.cfg['lr'])
         for epoch in range(self.cfg['epochs']):
             for batch_real_data in tqdm(train_dataloader):
                 self.perform_train_step(batch_real_data, tracker)

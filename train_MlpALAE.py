@@ -20,7 +20,7 @@ config = {'z_dim':50,
           'w_dim':50,
           'mapping_layers': 6,
           'image_dim':28,
-          'start_lr': 0.002,
+          'lr': 0.002,
           "batch_size": 128,
           'epochs':100}
 

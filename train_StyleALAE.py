@@ -28,7 +28,6 @@ config = {
     "phase_lengths": [600_000, 600_000, 600_000, 600_000, 600_000, 1000_000],
     "batch_sizes": [128, 128, 128, 64, 32, 32],
     "n_critic": 1,
-    "mapping_lr_factor": 0.01,
     "dump_imgs_freq": 5000,
     "checkpoint_freq": 10000
 }

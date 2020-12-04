@@ -9,9 +9,9 @@ class MappingFromLatent(nn.Module):
     """A mapping from the z latent space to the w space that should be run vefore the style generator"""
     def __init__(self, num_layers=5, input_dim=256, out_dim=256):
         super(MappingFromLatent, self).__init__()
-        layers = [LREQ_FC_Layer(input_dim, out_dim, lrmul=0.1), nn.LeakyReLU(0.2)]
+        layers = [LREQ_FC_Layer(input_dim, out_dim), nn.LeakyReLU(0.2)]
         for i in range(num_layers - 1):
-            layers += [LREQ_FC_Layer(out_dim, out_dim, lrmul=0.1), nn.LeakyReLU(0.2)]
+            layers += [LREQ_FC_Layer(out_dim, out_dim), nn.LeakyReLU(0.2)]
         self.mapping = torch.nn.Sequential(*layers)
 
     def forward(self, x):
