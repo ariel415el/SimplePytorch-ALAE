@@ -108,7 +108,6 @@ class StyleGan:
 
             generated_images = generated_images * 0.5 + 0.5
 
-            tracker.register_means(gs)
             tracker.plot()
             f = os.path.join(output_dir, 'images', f"gs-{gs}_res-{self.cfg['resolutions'][res_idx]}x{self.cfg['resolutions'][res_idx]}_alpha-{alpha:.3f}.jpg")
             save_image(generated_images, f, nrow=int(np.sqrt(len(samples_z))))

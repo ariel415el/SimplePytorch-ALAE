@@ -1,7 +1,5 @@
-import csv
-from collections import OrderedDict
+from collections import defaultdict
 import matplotlib.pyplot as plt
-import torch
 import os
 
 
@@ -9,8 +7,9 @@ class RunningMean:
     def __init__(self):
         self.mean = 0.0
         self.n = 0
+        self.means = []
 
-    def __iadd__(self, value):
+    def add(self, value):
         self.mean = (float(value) + self.mean * self.n)/(self.n + 1)
         self.n += 1
         return self
@@ -19,83 +18,29 @@ class RunningMean:
         self.mean = 0.0
         self.n = 0
 
-    def mean(self):
-        return self.mean
-
-
-class RunningMeanTorch:
-    def __init__(self):
-        self.values = []
-
-    def __iadd__(self, value):
-        with torch.no_grad():
-            self.values.append(value.detach().cpu().unsqueeze(0))
-            return self
-
-    def reset(self):
-        self.values = []
-
-    def mean(self):
-        with torch.no_grad():
-            if len(self.values) == 0:
-                return 0.0
-            return float(torch.cat(self.values).mean().item())
+    def get_means(self):
+        self.means += [self.mean]
+        self.reset()
+        return self.means
 
 
 class LossTracker:
-    def __init__(self, output_folder='.'):
-        self.tracks = OrderedDict()
-        self.epochs = []
-        self.means_over_epochs = OrderedDict()
+    def __init__(self, output_folder):
+        self.tracks = defaultdict(RunningMean)
         self.output_folder = output_folder
         os.makedirs(self.output_folder, exist_ok=True)
 
     def update(self, d):
         for k, v in d.items():
-            if k not in self.tracks:
-                self.add(k)
-            self.tracks[k] += v
-
-    def add(self, name, pytorch=True):
-        assert name not in self.tracks, "Name is already used"
-        if pytorch:
-            track = RunningMeanTorch()
-        else:
-            track = RunningMean()
-        self.tracks[name] = track
-        self.means_over_epochs[name] = []
-        return track
-
-    def register_means(self, epoch):
-        self.epochs.append(epoch)
-
-        for key in self.means_over_epochs.keys():
-            if key in self.tracks:
-                value = self.tracks[key]
-                self.means_over_epochs[key].append(value.mean())
-                value.reset()
-            else:
-                self.means_over_epochs[key].append(None)
-
-        with open(os.path.join(self.output_folder, 'log.csv'), mode='w') as csv_file:
-            fieldnames = ['epoch'] + list(self.tracks.keys())
-            writer = csv.writer(csv_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-            writer.writerow(fieldnames)
-            for i in range(len(self.epochs)):
-                writer.writerow([self.epochs[i]] + [self.means_over_epochs[x][i] for x in self.tracks.keys()])
-
-    def __str__(self):
-        result = ""
-        for key, value in self.tracks.items():
-            result += "%s: %.7f, " % (key, value.mean())
-        return result[:-2]
+            self.tracks[k].add(v.item())
 
     def plot(self):
         plt.figure(figsize=(12, 8))
         for key in self.tracks.keys():
-            plt.plot(self.epochs, self.means_over_epochs[key], label=key)
+            plot = self.tracks[key].get_means()
+            plt.plot(range(len(plot)), plot, label=key)
 
-        plt.xlabel('Epoch')
+        plt.xlabel('steps')
         plt.ylabel('Loss')
 
         plt.legend(loc=4)
@@ -104,27 +49,3 @@ class LossTracker:
 
         plt.savefig(os.path.join(self.output_folder, 'plot.png'))
         plt.close()
-
-    def state_dict(self):
-        return {
-            'tracks': self.tracks,
-            'epochs': self.epochs,
-            'means_over_epochs': self.means_over_epochs}
-
-    def load_state_dict(self, state_dict):
-        self.tracks = state_dict['tracks']
-        self.epochs = state_dict['epochs']
-        self.means_over_epochs = state_dict['means_over_epochs']
-
-        counts = list(map(len, self.means_over_epochs.values()))
-
-        if len(counts) == 0:
-            counts = [0]
-        m = min(counts)
-
-        if m < len(self.epochs):
-            self.epochs = self.epochs[:m]
-
-        for key in self.means_over_epochs.keys():
-            if len(self.means_over_epochs[key]) > m:
-                self.means_over_epochs[key] = self.means_over_epochs[key][:m]

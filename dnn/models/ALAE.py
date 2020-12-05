@@ -211,7 +211,6 @@ class StyleALAE(ALAE):
                 progress_bar.set_description(progress_tag)
 
                 if self.train_step % self.cfg['dump_imgs_freq'] == 0:
-                    tracker.register_means(self.train_step)
                     tracker.plot()
                     dump_path = os.path.join(output_dir, 'images', f"{progress_tag}.jpg")
                     self.save_sample(dump_path, test_data[0], test_data[1], final_resolution_idx=self.res_idx, alpha=alpha)
@@ -277,7 +276,6 @@ class MLP_ALAE(ALAE):
             for batch_real_data in tqdm(train_dataloader):
                 self.perform_train_step(batch_real_data, tracker)
 
-            tracker.register_means(epoch)
             tracker.plot()
             dump_path = os.path.join(output_dir, 'images', f"epoch-{epoch}.jpg")
             self.save_sample(dump_path, test_data[0], test_data[1])

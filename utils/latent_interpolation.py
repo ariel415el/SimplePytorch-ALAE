@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+
 def plot_latent_interpolation(model, start_images, end_images, steps=5, plot_path="latnet_interpolation.png"):
     N = start_images.shape[0]
     C, H, W = start_images.shape[1:]
@@ -23,7 +24,10 @@ def plot_latent_interpolation(model, start_images, end_images, steps=5, plot_pat
     start_row = np.concatenate(start_images.detach().numpy(), axis=2) * 0.5 + 0.5
     end_row = np.concatenate(end_images.detach().numpy(), axis=2)* 0.5 + 0.5
     canvas = np.concatenate([start_row, canvas, end_row], axis=1)
-    plt.imshow(canvas.transpose(1,2,0), cmap='gray', vmin=0, vmax=1)
+    if C == 1:
+        plt.imshow(canvas[0], cmap='gray', vmin=0, vmax=1)
+    else:
+        plt.imshow(canvas.transpose(1,2,0), vmin=0, vmax=1)
     plt.yticks(np.arange(H/2, canvas.shape[1], H) , yticks)
     plt.savefig(plot_path)
     plt.clf()
