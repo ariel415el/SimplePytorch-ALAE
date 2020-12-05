@@ -1,9 +1,8 @@
 import os
 from tqdm import tqdm
 from torchvision.utils import save_image
-from dnn.models.modules.AlaeModules import *
-from dnn.models.modules.StyleGanGenerator import StylleGanGenerator, MappingFromLatent
-from dnn.custom_adam import LREQAdam
+from dnn.modules.AlaeModules import *
+from dnn.modules.StyleGanGenerator import StylleGanGenerator, MappingFromLatent
 from utils.tracker import LossTracker
 from dnn.costume_layers import compute_r1_gradient_penalty
 from datasets import get_dataloader, EndlessDataloader
@@ -36,10 +35,10 @@ class ALAE:
         self.F = MappingFromLatent(input_dim=self.cfg['z_dim'], out_dim=self.cfg['w_dim'], num_layers=self.cfg['mapping_layers']).to(device).train()
         self.D = DiscriminatorMLP(input_dim=self.cfg['w_dim'], num_layers=self.cfg['descriminator_layers']).to(device).train()
 
-        self.ED_optimizer = LREQAdam([{'params': self.D.parameters(), 'lr_mult': self.cfg['discriminator_lr_factor']},
+        self.ED_optimizer = torch.optim.Adam([{'params': self.D.parameters(), 'lr_mult': self.cfg['discriminator_lr_factor']},
                                       {'params': self.E.parameters(),}],
                                       betas=(0.0, 0.99), weight_decay=0)
-        self.FG_optimizer = LREQAdam([{'params': self.F.parameters(), 'lr_mult': self.cfg['mapping_lr_factor']},
+        self.FG_optimizer = torch.optim.Adam([{'params': self.F.parameters(), 'lr_mult': self.cfg['mapping_lr_factor']},
                                       {'params': self.G.parameters()}],
                                       betas=(0.0, 0.99), weight_decay=0)
 
@@ -283,3 +282,24 @@ class MLP_ALAE(ALAE):
             dump_path = os.path.join(output_dir, 'images', f"epoch-{epoch}.jpg")
             self.save_sample(dump_path, test_data[0], test_data[1])
 
+            self.save_train_state("last_ckp.pth")
+
+    def load_train_state(self, checkpoint_path):
+        if checkpoint_path and os.path.exists(checkpoint_path):
+            checkpoint = torch.load(checkpoint_path)
+            self.F.load_state_dict(checkpoint['F'])
+            self.G.load_state_dict(checkpoint['G'])
+            self.E.load_state_dict(checkpoint['E'])
+            self.D.load_state_dict(checkpoint['D'])
+            print(f"Checkpoint {os.path.basename(checkpoint_path)} loaded.")
+
+    def save_train_state(self, save_path):
+        torch.save(
+            {
+                'F': self.F.state_dict(),
+                'G': self.G.state_dict(),
+                'E': self.E.state_dict(),
+                'D': self.D.state_dict(),
+            },
+            save_path
+        )

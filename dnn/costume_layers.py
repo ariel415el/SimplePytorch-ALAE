@@ -123,51 +123,19 @@ class AdaIn(nn.Module):
         return rescaled_image
 
 
-class LREQ_FC_Layer_2(nn.Module):
-    def __init__(self, in_features, out_features):
-        super(LREQ_FC_Layer_2, self).__init__()
-        self.in_features = in_features
-        self.weight = Parameter(torch.Tensor(out_features, in_features))
-        self.bias = Parameter(torch.Tensor(out_features))
-        self.weight.data.normal_()
-        self.bias.data.zero_()
-        self.c = np.sqrt(2.0) / np.sqrt(self.in_features)
-
-    def forward(self, input):
-        self.weight.data *= self.c
-        return F.linear(input, self.weight, self.bias)
-
-
-class LREQ_FC_Layer(nn.Module):
-    """
-    This is a equlized learning rate version of a linear unit.
-    It initializes weights with N(0,1).
-    The weights are supposed to be divided by a constant each forward but this implementation is rather different.
-    It must be coupled with the a costume optimizer that mutliplies the step size with the saved new attribute 'lr_equalization_coef'.
-    For more information see "PROGRESSIVE GROWING OF GANS FOR IMPROVED QUALITY, STABILITY,AND VARIATION"
-
-    """
+class LREQ_FC_Layer(nn.Linear):
     def __init__(self, in_features, out_features, bias=True):
-        super(LREQ_FC_Layer, self).__init__()
-        self.in_features = in_features
-        self.weight = Parameter(torch.Tensor(out_features, in_features))
+        super(LREQ_FC_Layer, self).__init__(in_features, out_features, bias)
+        init.normal_(self.weight)
         if bias:
-            self.bias = Parameter(torch.Tensor(out_features))
-        else:
-            self.register_parameter('bias', None)
-        self.std = np.sqrt(2.0) / np.sqrt(self.in_features)
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        init.normal_(self.weight, mean=0, std=self.std)
-        setattr(self.weight, 'lr_equalization_coef', self.std)
-
-        if self.bias is not None:
-            with torch.no_grad():
-                self.bias.zero_()
+            init.zeros_(self.bias)
+        self.c = np.sqrt(2.0) / np.sqrt(in_features)
 
     def forward(self, input):
-        return F.linear(input, self.weight, self.bias)
+        return F.linear(input,
+                        self.weight * self.c,
+                        self.bias)
+
 
 
 class Lreq_Conv2d(nn.Module):
@@ -181,25 +149,25 @@ class Lreq_Conv2d(nn.Module):
         self.output_padding = (output_padding, output_padding)
         self.dilation = (dilation, dilation)
 
-        self.weight = Parameter(torch.Tensor(out_channels, in_channels , *self.kernel_size))
+        self.weight = Parameter(torch.Tensor(out_channels, in_channels, *self.kernel_size))
+        init.normal_(self.weight)
         if bias:
             self.bias = Parameter(torch.Tensor(out_channels))
+            init.zeros_(self.bias)
         else:
             self.register_parameter('bias', None)
-        self.fan_in = np.prod(self.kernel_size) * in_channels
-        self.std = np.sqrt(2.0) / np.sqrt(self.fan_in)
-        self.reset_parameters()
+
+        self.c = np.sqrt(2.0) / np.sqrt(np.prod(self.kernel_size) * in_channels)
 
     def __str__(self):
         return f"LreqConv2d({self.in_channels}, {self.out_channels}, k={self.kernel_size[0]}, p={self.padding[0]})"
 
-    def reset_parameters(self):
-        init.normal_(self.weight, mean=0, std=self.std)
-        setattr(self.weight, 'lr_equalization_coef', self.std)
-
-        if self.bias is not None:
-            with torch.no_grad():
-                self.bias.zero_()
 
     def forward(self, x):
-        return F.conv2d(x, self.weight, self.bias, stride=self.stride, padding=self.padding, dilation=self.dilation)
+        return F.conv2d(x,
+                        self.weight * self.c,
+                        self.bias,
+                        stride=self.stride,
+                        padding=self.padding,
+                        dilation=self.dilation
+                        )

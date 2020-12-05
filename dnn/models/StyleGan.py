@@ -4,9 +4,8 @@ import torch
 import torch.nn.functional as F
 from torchvision.utils import save_image
 import numpy as np
-from dnn.models.modules.StyleGanGenerator import StylleGanGenerator, MappingFromLatent
-from dnn.models.modules.PGGanDiscriminator import PGGanDiscriminator
-from dnn.custom_adam import LREQAdam
+from dnn.modules.StyleGanGenerator import StylleGanGenerator, MappingFromLatent
+from dnn.modules.PGGanDiscriminator import PGGanDiscriminator
 from utils.tracker import LossTracker
 from dnn.costume_layers import compute_r1_gradient_penalty
 from datasets import get_dataloader, EndlessDataloader
@@ -29,8 +28,8 @@ class StyleGan:
 
         self.D = PGGanDiscriminator(progression=progression).to(device).train()
 
-        self.G_optimizer = LREQAdam(list(self.F.parameters()) + list(self.G.parameters()), lr=self.cfg['lr'], betas=(0.0, 0.99), weight_decay=0)
-        self.D_optimizer = LREQAdam(self.D.parameters(), lr=self.cfg['lr'], betas=(0.0, 0.99), weight_decay=0)
+        self.G_optimizer = torch.optim.Adam(list(self.F.parameters()) + list(self.G.parameters()), lr=self.cfg['lr'], betas=(0.0, 0.99), weight_decay=0)
+        self.D_optimizer = torch.optim.Adam(self.D.parameters(), lr=self.cfg['lr'], betas=(0.0, 0.99), weight_decay=0)
 
     def get_D_loss(self, batch_real_data, res_idx, alpha):
         batch_z = torch.randn(batch_real_data.shape[0], self.cfg['z_dim'], dtype=torch.float32).to(self.device)

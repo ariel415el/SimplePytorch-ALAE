@@ -39,7 +39,7 @@ if __name__ == '__main__':
     os.makedirs(os.path.join(output_dir, 'checkpoints'), exist_ok=True)
     os.makedirs(os.path.join(output_dir, 'images'), exist_ok=True)
 
-    cfg_file_path = os.path.join(output_dir, 'checkpoints', "cfg.pt_pkl")
+    cfg_file_path = os.path.join(output_dir, 'checkpoints', "cfg.pt")
     if os.path.exists(cfg_file_path):
         print("Overriding model config from file...")
         config = torch.load(cfg_file_path)

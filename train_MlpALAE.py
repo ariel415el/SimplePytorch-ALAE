@@ -41,8 +41,12 @@ if __name__ == '__main__':
     if args.print_model:
         print(model)
 
-    test_dataloader = get_dataloader(test_dataset, batch_size=args.num_debug_images, resize=None, device=device)
-    test_samples_z = torch.randn(args.num_debug_images, config['z_dim'], dtype=torch.float32).to(device)
-    test_samples = next(iter(test_dataloader))
+    if os.path.exists("last_ckp.pth"):
+        model.load_train_state("last_ckp.pth")
+    else:
+        print("Training model")
+        test_dataloader = get_dataloader(test_dataset, batch_size=args.num_debug_images, resize=None, device=device)
+        test_samples_z = torch.randn(args.num_debug_images, config['z_dim'], dtype=torch.float32).to(device)
+        test_samples = next(iter(test_dataloader))
 
-    model.train(train_dataset, (test_samples_z, test_samples), output_dir)
+        model.train(train_dataset, (test_samples_z, test_samples), output_dir)
