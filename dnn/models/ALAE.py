@@ -282,7 +282,7 @@ class MLP_ALAE(ALAE):
             dump_path = os.path.join(output_dir, 'images', f"epoch-{epoch}.jpg")
             self.save_sample(dump_path, test_data[0], test_data[1])
 
-            self.save_train_state("last_ckp.pth")
+            self.save_train_state(os.path.join(output_dir, "last_ckp.pth"))
 
     def load_train_state(self, checkpoint_path):
         if checkpoint_path and os.path.exists(checkpoint_path):
