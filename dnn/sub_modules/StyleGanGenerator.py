@@ -1,7 +1,7 @@
 from dnn.costume_layers import *
 
 """
-All the modules here are descibed in https://arxiv.org/pdf/1812.04948.pdf
+All the sub_modules here are descibed in https://arxiv.org/pdf/1812.04948.pdf
 """
 
 

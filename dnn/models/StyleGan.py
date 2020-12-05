@@ -4,8 +4,8 @@ import torch
 import torch.nn.functional as F
 from torchvision.utils import save_image
 import numpy as np
-from dnn.modules.StyleGanGenerator import StylleGanGenerator, MappingFromLatent
-from dnn.modules.PGGanDiscriminator import PGGanDiscriminator
+from dnn.sub_modules.StyleGanGenerator import StylleGanGenerator, MappingFromLatent
+from dnn.sub_modules.PGGanDiscriminator import PGGanDiscriminator
 from utils.tracker import LossTracker
 from dnn.costume_layers import compute_r1_gradient_penalty
 from datasets import get_dataloader, EndlessDataloader

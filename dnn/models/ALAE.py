@@ -1,8 +1,8 @@
 import os
 from tqdm import tqdm
 from torchvision.utils import save_image
-from dnn.modules.AlaeModules import *
-from dnn.modules.StyleGanGenerator import StylleGanGenerator, MappingFromLatent
+from dnn.sub_modules.AlaeModules import *
+from dnn.sub_modules.StyleGanGenerator import StylleGanGenerator, MappingFromLatent
 from utils.tracker import LossTracker
 from dnn.costume_layers import compute_r1_gradient_penalty
 from datasets import get_dataloader, EndlessDataloader

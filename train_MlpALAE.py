@@ -41,8 +41,9 @@ if __name__ == '__main__':
     if args.print_model:
         print(model)
 
-    if os.path.exists("last_ckp.pth"):
-        model.load_train_state("last_ckp.pth")
+    ckp_path = os.path.join(output_dir, "last_ckp.pth")
+    if os.path.exists(ckp_path):
+        model.load_train_state(ckp_path)
     else:
         print("Training model")
         test_dataloader = get_dataloader(test_dataset, batch_size=args.num_debug_images, resize=None, device=device)
