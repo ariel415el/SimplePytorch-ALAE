@@ -28,14 +28,14 @@ python3 train_StyleGan.py --dataset_name LFW
 Results of Style ALAE on FFHQ (64x64 resize):
 (First row: Real images; second row: reconstructed images; third row randomly generated digits)
 
-![text](assets/StyleALAE-FFHQ-no-tricks.gif)
+![text](assets/StyleALAE-FFHQ-no-tricks-64x64.gif)
 
 reprodue:
 ```
 python3 train_StyleALAE.py --dataset_name FFHQ
 ```
 ## requirements
-- imageio
+- imageiofile
 - kaggle
 - numpy
 - opencv-python
